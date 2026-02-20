@@ -1,0 +1,14 @@
+# Alternative Data Sources Dependencies
+# Install with: pip3 install -r requirements.txt
+
+# Reddit API
+praw>=7.7.1
+
+# Google Trends
+pytrends>=4.9.2
+
+# Already have these from main stockbot
+requests>=2.28.1
+pandas>=2.0.0
+
+# Optional: FRED API key (get free at https://fred.stlouisfed.org/docs/api/api_key.html)

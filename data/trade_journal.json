@@ -1,0 +1,29 @@
+{
+  "trades": [
+    {
+      "type": "skip",
+      "symbol": "MSFT",
+      "timestamp": "2026-02-17T01:46:57.240631",
+      "date": "2026-02-17",
+      "time": "01:46:57",
+      "reason": "portfolio_health",
+      "signals": {
+        "rsi": 35,
+        "macd": "bullish",
+        "volume": "high"
+      }
+    },
+    {
+      "type": "exit",
+      "symbol": "AAPL",
+      "timestamp": "2026-02-17T01:46:57.241754",
+      "date": "2026-02-17",
+      "price": 18.5,
+      "qty": 3,
+      "reason": "take_profit",
+      "pnl": 5.49,
+      "hold_days": 5,
+      "note": "Exit without matching entry"
+    }
+  ]
+}

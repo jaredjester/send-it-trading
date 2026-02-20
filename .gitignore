@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables (DO NOT COMMIT)
+.env
+*.env
+secrets.json
+credentials.json
+
+# API Keys and sensitive data
+*_keys.json
+*_secrets.py
+config_production.json
+
+# Logs
+*.log
+logs/
+*.jsonl
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# State files (contain live positions)
+state/
+backtest_results.db
+alpha_metrics.json
+deployment_log.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Backup files
+*.backup
+*.bak
+*.backup_*
+
+# Documentation build
+docs/_build/
+site/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/

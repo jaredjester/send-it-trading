@@ -1,0 +1,104 @@
+{
+  "account": {
+    "alpaca_api_key": "AKYI7MN9ZH5X44DNDH6K",
+    "alpaca_secret_key": "GAXKFKznNRreycPzRXnOz4ashGMwWUietfRKLsdr",
+    "alpaca_base_url": "https://paper-api.alpaca.markets",
+    "alpaca_data_url": "https://data.alpaca.markets",
+    "data_feed": "iex"
+  },
+  "portfolio": {
+    "max_position_pct": 0.20,
+    "max_sector_pct": 0.30,
+    "min_cash_reserve_pct": 0.10,
+    "target_portfolio_size": 366,
+    "min_position_value": 5.0,
+    "max_positions": 20
+  },
+  "risk": {
+    "max_daily_drawdown_pct": 0.03,
+    "max_consecutive_losses": 3,
+    "vix_spike_threshold": 2.0,
+    "zombie_loss_threshold": 0.60,
+    "zombie_min_value": 5.0,
+    "zombie_no_volume_days": 5,
+    "stop_loss_pct": 0.08,
+    "trailing_stop_pct": 0.12
+  },
+  "mean_reversion": {
+    "enabled": true,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "std_dev_threshold": 2.0,
+    "volume_spike_min": 1.5,
+    "lookback_days": 20,
+    "target_hold_days": 2,
+    "score_weight": 0.35
+  },
+  "momentum": {
+    "enabled": true,
+    "adx_threshold": 25,
+    "sma_short": 20,
+    "sma_long": 50,
+    "volume_growth_min": 1.2,
+    "target_hold_days": 10,
+    "score_weight": 0.30
+  },
+  "sector_rotation": {
+    "enabled": true,
+    "sectors": ["XLK", "XLF", "XLE", "XLV", "XLY", "XLI", "XLB", "XLP", "XLU", "XLRE", "XLC"],
+    "top_sectors_count": 3,
+    "bottom_sectors_count": 3,
+    "recompute_interval_days": 7,
+    "lookback_days": 90,
+    "score_weight": 0.15
+  },
+  "sentiment": {
+    "enabled": true,
+    "require_technical_confirmation": true,
+    "sentiment_weight": 0.20,
+    "positive_threshold": 0.6,
+    "negative_threshold": 0.4,
+    "score_weight": 0.20
+  },
+  "execution_gate": {
+    "min_confidence": 0.50,
+    "medium_confidence": 0.65,
+    "high_confidence": 0.80,
+    "very_high_confidence": 0.90,
+    "rl_weight": 0.30,
+    "alpha_weight": 0.70,
+    "rl_state_path": "/home/jonathangan/shared/stockbot/adaptive/q_state.json"
+  },
+  "tax_loss_harvesting": {
+    "enabled": true,
+    "loss_threshold_pct": 0.05,
+    "min_hold_days": 30,
+    "wash_sale_days": 30,
+    "year_end_window_days": 45
+  },
+  "correlation": {
+    "enabled": true,
+    "max_correlation": 0.80,
+    "lookback_days": 30,
+    "check_interval_days": 7
+  },
+  "benchmark": {
+    "symbol": "SPY",
+    "trailing_threshold_pct": 0.10,
+    "beating_threshold_pct": 0.05,
+    "lookback_days": 30,
+    "state_file": "/Users/jon/.openclaw/workspace/strategy-v2/benchmark_state.json"
+  },
+  "data": {
+    "max_bars": 200,
+    "cache_ttl_seconds": 300,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 2
+  },
+  "logging": {
+    "level": "INFO",
+    "log_file": "/Users/jon/.openclaw/workspace/strategy-v2/trading.log",
+    "max_bytes": 10485760,
+    "backup_count": 5
+  }
+}
