@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from core.config import load_config
+
 
 class ExecutionGate:
     """
@@ -25,18 +27,17 @@ class ExecutionGate:
     - Manages position sizing based on confidence
     """
     
-    def __init__(self, config_path: str = "master_config.json"):
+    def __init__(self, config_path: str | None = None):
         """Initialize execution gate with configuration."""
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-        
-        self.gate_cfg = self.config['execution_gate']
-        self.risk_cfg = self.config['risk']
-        self.portfolio_cfg = self.config['portfolio']
+        self.config = load_config(config_path)
+        self.gate_cfg = self.config.get("execution_gate", {})
+        self.risk_cfg = self.config.get("risk", {})
+        self.portfolio_cfg = self.config.get("portfolio", {})
         
         # Initialize logging first
+        log_cfg = self.config.get("logging", {})
         logging.basicConfig(
-            level=self.config['logging']['level'],
+            level=log_cfg.get("level", "INFO"),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
@@ -55,12 +56,16 @@ class ExecutionGate:
     
     def _load_rl_state(self) -> Optional[Dict]:
         """Load Q-learner state from file."""
-        rl_path = self.gate_cfg['rl_state_path']
-        
+        rl_path = self.gate_cfg.get("rl_state_path", "./state/q_state.json")
+
+        # Ensure state directory exists
+        from pathlib import Path
+        Path(rl_path).parent.mkdir(parents=True, exist_ok=True)
+
         if not os.path.exists(rl_path):
             self.logger.warning(f"RL state file not found: {rl_path}")
             return None
-        
+
         try:
             with open(rl_path, 'r') as f:
                 rl_state = json.load(f)
@@ -372,14 +377,47 @@ class ExecutionGate:
                 "final_recommendation": "REJECT"
             }
         
-        # Calculate position size
-        base_size = portfolio_value * 0.05  # 5% base position
-        sizing = self.calculate_position_size(
-            base_size,
-            effective_confidence,
-            portfolio_value,
-            circuit_breaker_status
-        )
+        # Position sizing: Kelly (unified) when enabled, else fixed 5% base
+        kelly_cfg = self.config.get("kelly_sizing", {})
+        if kelly_cfg.get("enabled"):
+            try:
+                from core.sizing import unified_position_size
+                kelly_result = unified_position_size(
+                    alpha_output=alpha_score,
+                    portfolio_value=portfolio_value,
+                    regime="unknown",
+                    alpha_tracker_signal=alpha_score.get("strategy"),
+                    circuit_breaker_status=circuit_breaker_status,
+                    current_positions=current_positions,
+                )
+                if not kelly_result["approved"]:
+                    sizing = {
+                        "approved": False,
+                        "position_size": 0,
+                        "adjustments": kelly_result.get("rationale", []) + ["Kelly: no edge or rejected"],
+                    }
+                else:
+                    # Apply RL blend on Kelly size
+                    rl_mult = rl_rec["confidence_multiplier"]
+                    blend = (effective_confidence * alpha_weight + rl_mult * rl_weight) / (alpha_weight + rl_weight)
+                    final_size = kelly_result["position_size"] * blend
+                    max_pos = portfolio_value * self.portfolio_cfg["max_position_pct"]
+                    final_size = min(final_size, max_pos)
+                    sizing = {
+                        "approved": final_size >= 5.0,
+                        "position_size": final_size,
+                        "adjustments": kelly_result.get("rationale", []) + [f"RL blend={blend:.2f}"],
+                    }
+            except ImportError:
+                base_size = portfolio_value * 0.05
+                sizing = self.calculate_position_size(
+                    base_size, effective_confidence, portfolio_value, circuit_breaker_status
+                )
+        else:
+            base_size = portfolio_value * 0.05
+            sizing = self.calculate_position_size(
+                base_size, effective_confidence, portfolio_value, circuit_breaker_status
+            )
         
         if not sizing['approved']:
             return {

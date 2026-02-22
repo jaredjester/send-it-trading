@@ -22,7 +22,7 @@ class AltDataWidget:
         try:
             with open(self.unified_file, 'r') as f:
                 return json.load(f)
-        except:
+        except Exception:
             return None
     
     def format_for_display(self, max_tickers=5):

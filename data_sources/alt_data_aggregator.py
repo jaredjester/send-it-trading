@@ -12,25 +12,37 @@ from collections import defaultdict
 
 # Import our data sources
 try:
-    from reddit_sentiment import RedditSentimentScraper
-    from google_trends import GoogleTrendsTracker
-    from options_flow import OptionsFlowTracker
-    from fred_macro import FREDMacroTracker
+    from .reddit_sentiment import RedditSentimentScraper
+    from .google_trends import GoogleTrendsTracker
+    from .options_flow import OptionsFlowTracker
+    from .fred_macro import FREDMacroTracker
     try:
-        from stocktwits_sentiment import StockTwitsScraper
+        from .stocktwits_sentiment import StockTwitsScraper
         HAS_STOCKTWITS = True
     except ImportError:
         HAS_STOCKTWITS = False
 except ImportError:
-    print("⚠️  Data source modules not found. Make sure they're in the same directory.")
-    HAS_STOCKTWITS = False
+    # Try absolute imports if relative imports fail
+    try:
+        from reddit_sentiment import RedditSentimentScraper
+        from google_trends import GoogleTrendsTracker
+        from options_flow import OptionsFlowTracker
+        from fred_macro import FREDMacroTracker
+        try:
+            from stocktwits_sentiment import StockTwitsScraper
+            HAS_STOCKTWITS = True
+        except ImportError:
+            HAS_STOCKTWITS = False
+    except ImportError:
+        print("⚠️  Data source modules not found. Make sure they're in the same directory.")
+        HAS_STOCKTWITS = False
 
 class AltDataAggregator:
     """
     Aggregates alternative data signals for trading strategy.
     """
     
-    def __init__(self, data_dir='../data/alt_data'):
+    def __init__(self, data_dir='./data/alt_data'):
         self.data_dir = data_dir
         os.makedirs(data_dir, exist_ok=True)
         
@@ -273,7 +285,7 @@ class AltDataAggregator:
                 data = json.load(f)
             
             return data.get('macro_regime', 'neutral')
-        except:
+        except Exception:
             return 'neutral'
 
 def main():

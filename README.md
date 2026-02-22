@@ -21,6 +21,66 @@ A complete evaluation framework and conviction-based trading system for capturin
 
 ## 🏗️ Architecture
 
+### Modular Framework Overview
+
+**Pluggable, customizable, production-ready.**
+
+```
+core/                    # Framework essentials
+├── config.py            # Central config (env overrides, path resolution)
+├── alpaca_client.py     # Unified Alpaca API (data, account, positions)
+└── sizing.py            # Kelly position sizing (signal + edge)
+
+data_sources/            # Alternative data (Reddit, FRED, options flow, etc.)
+evaluation/              # IC tracking, backtest, deployment gate
+scanners/                # Gap scanner, catalyst scanner
+```
+
+**CLI:**
+```bash
+python run.py scan      # Screen universe
+python run.py exits     # Check exit signals
+python run.py portfolio # Portfolio status
+python run.py cycle     # Full cycle (live)
+```
+
+### Unified Signal + Kelly Sizing
+
+**Signal, pattern, and Kelly in one flow.** Alpha scores → pattern confluence → edge (p, B) → Kelly fraction → position size.
+
+```
+Alpha (mean_reversion, momentum, sentiment)
+    → Pattern confluence (RSI + volume + trend alignment)
+    → Edge estimate: p (win prob), B (payoff ratio)
+    → Kelly: f* = (Bp - q) / B
+    → Fractional (½-Kelly default) + caps + correlation haircut
+    → Position size in dollars
+```
+
+Enable in `master_config.json`:
+```json
+"kelly_sizing": {
+  "enabled": true,
+  "fractional": 0.5,
+  "max_position_pct": 0.2
+}
+```
+
+Use directly:
+```python
+from core.sizing import unified_position_size
+
+result = unified_position_size(
+    alpha_output=alpha_result,
+    portfolio_value=1000,
+    regime="bull",
+    current_positions=2,
+)
+# result["position_size"], result["approved"], result["edge"]
+```
+
+---
+
 ### Part 1: Evaluation Framework (Precision)
 
 **Measures edge. Prevents degradation.**
@@ -113,6 +173,11 @@ cd send-it-trading
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Setup: Copy example config and add your credentials
+cp master_config.example.json master_config.json
+# Edit master_config.json with your Alpaca keys, or set env vars:
+#   ALPACA_API_LIVE_KEY, ALPACA_API_SECRET (or APCA_API_KEY_ID, APCA_API_SECRET_KEY)
 ```
 
 ### Basic Usage
@@ -384,7 +449,7 @@ Position: 100% of capital
 
 ```bash
 # Run tests
-python -m pytest test_system.py -v
+python -m pytest tests/ -v
 
 # Backtest a strategy
 python -m evaluation.backtest_engine \
@@ -392,6 +457,15 @@ python -m evaluation.backtest_engine \
     --end 2026-02-01 \
     --config config.yaml
 ```
+
+---
+
+## 🔒 Production Setup
+
+1. **Credentials**: Never commit `master_config.json` with real keys. Use env vars or a local (gitignored) config.
+2. **Paths**: Set `STRATEGY_ROOT` if deploying outside the repo directory.
+3. **State dirs**: Create `state/` and `logs/` (or they auto-create on first use).
+4. **Rotate keys**: If this repo was ever public, rotate Alpaca keys immediately.
 
 ---
 

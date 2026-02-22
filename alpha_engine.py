@@ -9,13 +9,17 @@ into a unified scoring system. Pure Python + numpy + pandas only.
 
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import requests
+
+from core.config import load_config
 
 
 class AlphaEngine:
@@ -27,15 +31,14 @@ class AlphaEngine:
     - Sentiment-enhanced signals
     """
     
-    def __init__(self, config_path: str = "master_config.json"):
+    def __init__(self, config_path: str | None = None):
         """Initialize alpha engine with configuration."""
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-        
-        self.api_key = self.config['account']['alpaca_api_key']
-        self.api_secret = self.config['account']['alpaca_secret_key']
-        self.data_url = self.config['account']['alpaca_data_url']
-        self.feed = self.config['account']['data_feed']
+        self.config = load_config(config_path)
+        acct = self.config.get("account", {})
+        self.api_key = acct.get("alpaca_api_key") or os.getenv("APCA_API_KEY_ID") or os.getenv("ALPACA_API_LIVE_KEY")
+        self.api_secret = acct.get("alpaca_secret_key") or os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_API_SECRET")
+        self.data_url = acct.get("alpaca_data_url", "https://data.alpaca.markets")
+        self.feed = acct.get("data_feed", "iex")
         
         self.headers = {
             "APCA-API-KEY-ID": self.api_key,
@@ -45,10 +48,11 @@ class AlphaEngine:
         # Cache for bar data to reduce API calls
         self.bar_cache = {}
         self.cache_timestamps = {}
-        self.cache_ttl = self.config['data']['cache_ttl_seconds']
+        self.cache_ttl = self.config.get("data", {}).get("cache_ttl_seconds", 300)
         
+        log_cfg = self.config.get("logging", {})
         logging.basicConfig(
-            level=self.config['logging']['level'],
+            level=log_cfg.get("level", "INFO"),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)

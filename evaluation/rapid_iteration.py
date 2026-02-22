@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from core.config import get_project_root
 from evaluation.deployment_gate import DeploymentGate, ChangeValidator
 from evaluation.alpha_tracker import AlphaTracker
 from evaluation.backtest_engine import StrategyBacktester
@@ -33,7 +34,7 @@ class RapidIterationWorkflow:
         self.alpha_tracker = AlphaTracker()
         self.backtester = StrategyBacktester()
         
-        self.config_path = Path("~/shared/stockbot/strategy_v2/master_config.json").expanduser()
+        self.config_path = get_project_root() / "master_config.json"
         self.current_config = self._load_current_config()
     
     def _load_current_config(self) -> Dict:

@@ -6,6 +6,10 @@ requests>=2.31.0
 # Database (for backtest storage)
 sqlalchemy>=2.0.0
 
+# Data sources
+pytrends>=4.9.2
+praw>=7.7.1
+
 # Optional: For full backtest engine
 # scipy>=1.11.0
 # matplotlib>=3.7.0

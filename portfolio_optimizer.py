@@ -9,13 +9,17 @@ zombie position cleanup, and benchmark tracking.
 
 import json
 import logging
+import os
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
 import requests
+
+from core.config import load_config
 
 
 class PortfolioOptimizer:
@@ -28,15 +32,14 @@ class PortfolioOptimizer:
     - Benchmark tracking
     """
     
-    def __init__(self, config_path: str = "master_config.json"):
+    def __init__(self, config_path: str | None = None):
         """Initialize portfolio optimizer with configuration."""
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-        
-        self.api_key = self.config['account']['alpaca_api_key']
-        self.api_secret = self.config['account']['alpaca_secret_key']
-        self.data_url = self.config['account']['alpaca_data_url']
-        self.feed = self.config['account']['data_feed']
+        self.config = load_config(config_path)
+        acct = self.config.get("account", {})
+        self.api_key = acct.get("alpaca_api_key") or os.getenv("APCA_API_KEY_ID") or os.getenv("ALPACA_API_LIVE_KEY")
+        self.api_secret = acct.get("alpaca_secret_key") or os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_API_SECRET")
+        self.data_url = acct.get("alpaca_data_url", "https://data.alpaca.markets")
+        self.feed = acct.get("data_feed", "iex")
         
         self.headers = {
             "APCA-API-KEY-ID": self.api_key,
@@ -46,12 +49,14 @@ class PortfolioOptimizer:
         # Track wash sale windows
         self.wash_sale_tracker = {}
         
-        # Benchmark state
-        self.benchmark_state_file = self.config['benchmark']['state_file']
+        # Benchmark state (load_config resolves path)
+        benchmark_cfg = self.config.get("benchmark", {})
+        self.benchmark_state_file = benchmark_cfg.get("state_file", "./state/benchmark_state.json")
         self.load_benchmark_state()
         
+        log_cfg = self.config.get("logging", {})
         logging.basicConfig(
-            level=self.config['logging']['level'],
+            level=log_cfg.get("level", "INFO"),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self.logger = logging.getLogger(__name__)
@@ -59,6 +64,8 @@ class PortfolioOptimizer:
     def load_benchmark_state(self):
         """Load benchmark tracking state from file."""
         try:
+            # Ensure state directory exists
+            Path(self.benchmark_state_file).parent.mkdir(parents=True, exist_ok=True)
             with open(self.benchmark_state_file, 'r') as f:
                 self.benchmark_state = json.load(f)
         except FileNotFoundError:
@@ -68,9 +75,18 @@ class PortfolioOptimizer:
                 "start_date": datetime.utcnow().isoformat(),
                 "history": []
             }
+        except Exception as e:
+            self.logger.warning(f"Failed to load benchmark state: {e}")
+            self.benchmark_state = {
+                "initial_portfolio_value": 0,
+                "initial_spy_price": 0,
+                "start_date": datetime.utcnow().isoformat(),
+                "history": []
+            }
     
     def save_benchmark_state(self):
         """Save benchmark tracking state to file."""
+        Path(self.benchmark_state_file).parent.mkdir(parents=True, exist_ok=True)
         with open(self.benchmark_state_file, 'w') as f:
             json.dump(self.benchmark_state, f, indent=2)
     

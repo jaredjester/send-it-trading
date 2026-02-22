@@ -28,9 +28,14 @@ wheels/
 
 # Environment variables (DO NOT COMMIT)
 .env
+.env.*
+!.env.example
 *.env
 secrets.json
 credentials.json
+
+# Config with secrets (use master_config.example.json as template)
+master_config.json
 
 # API Keys and sensitive data
 *_keys.json
@@ -60,6 +65,7 @@ deployment_log.jsonl
 *.swo
 *~
 .DS_Store
+._*
 
 # Backup files
 *.backup

@@ -53,7 +53,18 @@ ALPACA_DATA = "https://data.alpaca.markets"
 def _get_keys():
     key = os.getenv("ALPACA_API_LIVE_KEY") or os.getenv("APCA_API_KEY_ID", "")
     secret = os.getenv("ALPACA_API_SECRET") or os.getenv("APCA_API_SECRET_KEY", "")
-    return key, secret
+    if not key or not secret:
+        config_path = BASE_DIR / "master_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                acct = cfg.get("account", {})
+                key = key or acct.get("alpaca_api_key", "")
+                secret = secret or acct.get("alpaca_secret_key", "")
+            except Exception as e:
+                logger.debug(f"Could not load config for credentials: {e}")
+    return key or "", secret or ""
 
 
 def _headers():
@@ -365,8 +376,8 @@ class RiskGate:
             try:
                 with open(self.state_file) as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Could not load risk state ({self.state_file}): {e}")
         return {
             "day_trades_today": 0,
             "consecutive_losses": 0,
@@ -941,8 +952,8 @@ async def run_orchestrated_cycle(send_telegram=None):
             msg += f"• {a}\n"
         try:
             await send_telegram_message(msg)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Telegram send failed: {e}")
 
     elif not actions_taken:
         logger.info("No actions taken this cycle")
@@ -954,37 +965,48 @@ async def run_orchestrated_cycle(send_telegram=None):
 # ==================================================================
 # CLI
 # ==================================================================
-if __name__ == "__main__":
+def main():
+    """CLI entry point. Usage: orchestrator [scan|exits|portfolio|cycle]."""
     logging.basicConfig(level=logging.INFO, format="%(name)s | %(message)s")
+    key, secret = _get_keys()
+    if not key or not secret:
+        logger.error("Missing Alpaca credentials. Set ALPACA_API_LIVE_KEY / ALPACA_API_SECRET")
+        sys.exit(1)
 
-    os.environ.setdefault("APCA_API_KEY_ID", "AKYI7MN9ZH5X44DNDH6K")
-    os.environ.setdefault("APCA_API_SECRET_KEY", "GAXKFKznNRreycPzRXnOz4ashGMwWUietfRKLsdr")
-
-    if len(sys.argv) > 1 and sys.argv[1] == "scan":
+    if len(sys.argv) > 1 and sys.argv[1] == "cycle":
+        asyncio.run(run_orchestrated_cycle())
+        return
         print("Scanning universe...")
         results = screen_universe(max_candidates=10)
         for r in results:
             print(f"  {r['symbol']:6s} score={r['score']:5.1f} "
                   f"action={r['action']:11s} strategy={r['strategy']:18s} "
                   f"RSI={r['rsi']:5.1f} ADX={r['adx']:5.1f}")
-    elif len(sys.argv) > 1 and sys.argv[1] == "exits":
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "exits":
         print("Scanning exits...")
         ps = PortfolioState()
         exits = scan_exits(ps)
         for e in exits:
             print(f"  {e['symbol']:8s} {e['action']:5s} — {e['reason']}")
-    elif len(sys.argv) > 1 and sys.argv[1] == "portfolio":
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "portfolio":
         ps = PortfolioState()
         print(json.dumps(ps.summary(), indent=2))
-    else:
-        print("Running full orchestrated cycle (dry run — no execution)...")
-        ps = PortfolioState()
-        print(f"Portfolio: {json.dumps(ps.summary(), indent=2)}")
-        print("\nExit signals:")
-        for e in scan_exits(ps):
-            print(f"  {e['symbol']:8s} {e['action']:5s} — {e['reason']}")
-        print("\nTop candidates:")
-        results = screen_universe(max_candidates=5)
-        for r in results:
-            print(f"  {r['symbol']:6s} score={r['score']:5.1f} {r['action']:11s} "
-                  f"({r['strategy']}) RSI={r['rsi']:.0f} ADX={r['adx']:.0f}")
+        return
+    # Default: dry run
+    print("Running full orchestrated cycle (dry run — no execution)...")
+    ps = PortfolioState()
+    print(f"Portfolio: {json.dumps(ps.summary(), indent=2)}")
+    print("\nExit signals:")
+    for e in scan_exits(ps):
+        print(f"  {e['symbol']:8s} {e['action']:5s} — {e['reason']}")
+    print("\nTop candidates:")
+    results = screen_universe(max_candidates=5)
+    for r in results:
+        print(f"  {r['symbol']:6s} score={r['score']:5.1f} {r['action']:11s} "
+              f"({r['strategy']}) RSI={r['rsi']:.0f} ADX={r['adx']:.0f}")
+
+
+if __name__ == "__main__":
+    main()

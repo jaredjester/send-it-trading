@@ -1,7 +1,18 @@
-"""Quick test of scanners with limited universe."""
+"""Quick test of scanners with limited universe.
+
+Requires Alpaca credentials via env vars:
+  ALPACA_API_LIVE_KEY, ALPACA_API_SECRET
+  or APCA_API_KEY_ID, APCA_API_SECRET_KEY
+
+Or create master_config.json from master_config.example.json.
+"""
 import os
-os.environ['ALPACA_API_LIVE_KEY'] = 'AKYI7MN9ZH5X44DNDH6K'
-os.environ['ALPACA_API_SECRET'] = 'GAXKFKznNRreycPzRXnOz4ashGMwWUietfRKLsdr'
+import sys
+
+# Credentials must be set before importing scanners
+if not (os.getenv("ALPACA_API_LIVE_KEY") or os.getenv("APCA_API_KEY_ID")):
+    print("ERROR: Set ALPACA_API_LIVE_KEY and ALPACA_API_SECRET (or APCA_API_KEY_ID/SECRET)")
+    sys.exit(1)
 
 from morning_gap_scanner import GapScanner
 from catalyst_scanner import CatalystScanner

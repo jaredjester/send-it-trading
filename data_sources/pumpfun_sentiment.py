@@ -43,7 +43,7 @@ class PumpFunSentimentTracker:
                 if resp.status_code == 200:
                     self.active_base = base
                     return True
-            except:
+            except Exception:
                 continue
         return False
     
@@ -98,7 +98,7 @@ class PumpFunSentimentTracker:
                 launch_time = datetime.fromtimestamp(ts)
                 if launch_time >= cutoff:
                     recent.append(launch)
-            except:
+            except Exception:
                 continue
         
         velocity = len(recent) / hours if hours > 0 else 0

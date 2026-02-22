@@ -5,29 +5,35 @@ Run this script anytime to get instant portfolio status
 """
 
 import json
+import os
 import requests
 from datetime import datetime
+
+from core.config import load_config
 from portfolio_optimizer import PortfolioOptimizer
 from execution_gate import ExecutionGate
 
 
 def get_alpaca_positions():
     """Fetch current positions from Alpaca API."""
-    with open('master_config.json', 'r') as f:
-        config = json.load(f)
-    
+    config = load_config()
+    acct = config.get("account", {})
+    api_key = acct.get("alpaca_api_key") or os.getenv("APCA_API_KEY_ID") or os.getenv("ALPACA_API_LIVE_KEY")
+    api_secret = acct.get("alpaca_secret_key") or os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_API_SECRET")
+
     headers = {
-        "APCA-API-KEY-ID": config['account']['alpaca_api_key'],
-        "APCA-API-SECRET-KEY": config['account']['alpaca_secret_key']
+        "APCA-API-KEY-ID": api_key,
+        "APCA-API-SECRET-KEY": api_secret
     }
     
     # Get account info
-    account_url = f"{config['account']['alpaca_base_url']}/v2/account"
+    base_url = acct.get("alpaca_base_url", "https://paper-api.alpaca.markets")
+    account_url = f"{base_url}/v2/account"
     account_resp = requests.get(account_url, headers=headers)
     account = account_resp.json()
     
     # Get positions
-    positions_url = f"{config['account']['alpaca_base_url']}/v2/positions"
+    positions_url = f"{base_url}/v2/positions"
     positions_resp = requests.get(positions_url, headers=headers)
     positions_data = positions_resp.json()
     
