@@ -25,6 +25,13 @@ except ImportError:
     def is_high_risk_sector(sector):
         return False
 
+try:
+    from core.monte_carlo import MonteCarloSimulator
+    MONTE_CARLO_AVAILABLE = True
+except ImportError:
+    MONTE_CARLO_AVAILABLE = False
+    logger.warning("Monte Carlo simulator not available - tail risk checks disabled")
+
 logger = logging.getLogger(__name__)
 
 
@@ -876,6 +883,82 @@ class CashReserveManager:
         except Exception as e:
             logger.error(f"Liquidation check error: {e}", exc_info=True)
             return []
+
+
+def check_tail_risk_monte_carlo(
+    symbol: str,
+    historical_returns: List[float],
+    kelly_fraction: float,
+    proposed_size: float,
+    max_drawdown_tolerance: float = 0.25,
+    n_sims: int = 10000
+) -> Tuple[bool, float, Dict]:
+    """
+    Check tail risk using Monte Carlo simulation before entering position.
+    
+    Args:
+        symbol: Trading symbol
+        historical_returns: List of historical daily returns
+        kelly_fraction: Conviction-based Kelly fraction
+        proposed_size: Proposed position size as fraction
+        max_drawdown_tolerance: Max acceptable p95 drawdown (default 25%)
+        n_sims: Number of Monte Carlo simulations
+    
+    Returns:
+        Tuple of (approved: bool, recommended_size: float, analysis: dict)
+    """
+    if not MONTE_CARLO_AVAILABLE:
+        logger.warning(f"Monte Carlo not available for {symbol} - approving without tail risk check")
+        return True, proposed_size, {}
+    
+    if len(historical_returns) < 20:
+        logger.warning(f"{symbol}: Only {len(historical_returns)} returns available - need 20+ for Monte Carlo")
+        return True, proposed_size, {}
+    
+    try:
+        # Run Monte Carlo simulation
+        mc = MonteCarloSimulator(historical_returns, n_sims=n_sims)
+        result = mc.analyze(
+            kelly=kelly_fraction,
+            current_size=proposed_size,
+            max_drawdown_tolerance=max_drawdown_tolerance
+        )
+        
+        analysis = result.to_dict()
+        
+        # Check if position is oversized
+        if result.verdict in ('OVERSIZED', 'SLIGHTLY_OVERSIZED'):
+            logger.warning(
+                f"{symbol} TAIL RISK WARNING: "
+                f"p95 drawdown {result.drawdown_dist['p95']:.1%}, "
+                f"p99 {result.drawdown_dist['p99']:.1%}. "
+                f"Recommend {result.recommended_size:.1%} vs proposed {proposed_size:.1%}"
+            )
+            
+            # If significantly oversized, block
+            if result.verdict == 'OVERSIZED' and abs(result.drawdown_dist['p95']) > max_drawdown_tolerance * 1.5:
+                logger.critical(
+                    f"{symbol} TAIL RISK BLOCK: "
+                    f"p95 drawdown {result.drawdown_dist['p95']:.1%} exceeds tolerance. "
+                    f"Position BLOCKED."
+                )
+                return False, 0.0, analysis
+            
+            # Otherwise, reduce size to recommended
+            return True, result.recommended_size, analysis
+        
+        # Position size is acceptable
+        logger.info(
+            f"{symbol} tail risk OK: "
+            f"p95 {result.drawdown_dist['p95']:.1%}, "
+            f"verdict {result.verdict}"
+        )
+        return True, proposed_size, analysis
+        
+    except Exception as e:
+        logger.error(f"Monte Carlo analysis failed for {symbol}: {e}", exc_info=True)
+        # On error, be conservative - approve but log warning
+        return True, proposed_size, {'error': str(e)}
 
 
 if __name__ == '__main__':

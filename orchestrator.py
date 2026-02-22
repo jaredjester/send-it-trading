@@ -45,6 +45,30 @@ except ImportError:
     def get_conviction_manager():
         return None
 
+# Monte Carlo tail risk checking
+try:
+    from risk_fortress import check_tail_risk_monte_carlo
+    MONTE_CARLO_ENABLED = True
+except ImportError:
+    MONTE_CARLO_ENABLED = False
+    logger.warning("Monte Carlo tail risk checking not available")
+
+# High-ROI Scanners (Gap & Catalyst)
+try:
+    from scanners.opportunity_finder import OpportunityFinder
+    SCANNERS_ENABLED = True
+except ImportError:
+    SCANNERS_ENABLED = False
+    logger.warning("High-ROI scanners not available - using basic screening only")
+
+# IC Integration (Signal → Outcome tracking)
+try:
+    from evaluation.ic_integration import record_trade_entry, record_trade_exit
+    IC_TRACKING_ENABLED = True
+except ImportError:
+    IC_TRACKING_ENABLED = False
+    logger.warning("IC tracking not available - signal quality not measured")
+
 # Alpaca endpoints
 ALPACA_BASE = "https://api.alpaca.markets"
 ALPACA_DATA = "https://data.alpaca.markets"
@@ -80,6 +104,57 @@ def _api_get(url, params=None, timeout=10):
     except Exception as e:
         logger.error(f"API error: {e}")
         return None
+
+
+def _get_historical_returns(symbol: str, days: int = 90) -> list:
+    """
+    Fetch historical daily returns for Monte Carlo analysis.
+    
+    Args:
+        symbol: Stock symbol
+        days: Number of days of history (default 90)
+    
+    Returns:
+        List of daily returns (e.g., [0.02, -0.01, 0.03])
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        end = datetime.now()
+        start = end - timedelta(days=days + 10)  # Extra buffer
+        
+        url = f"{ALPACA_DATA}/v2/stocks/{symbol}/bars"
+        params = {
+            "start": start.isoformat() + "Z",
+            "end": end.isoformat() + "Z",
+            "timeframe": "1D",
+            "feed": "iex",
+            "limit": days + 10
+        }
+        
+        data = _api_get(url, params=params, timeout=15)
+        if not data or 'bars' not in data:
+            logger.warning(f"No bars returned for {symbol}")
+            return []
+        
+        bars = data['bars']
+        if len(bars) < 20:
+            logger.warning(f"Only {len(bars)} bars for {symbol} - need 20+ for Monte Carlo")
+            return []
+        
+        # Calculate daily returns
+        closes = [float(bar['c']) for bar in bars]
+        returns = []
+        for i in range(1, len(closes)):
+            ret = (closes[i] - closes[i-1]) / closes[i-1]
+            returns.append(ret)
+        
+        logger.debug(f"Got {len(returns)} daily returns for {symbol}")
+        return returns
+        
+    except Exception as e:
+        logger.error(f"Failed to get historical returns for {symbol}: {e}")
+        return []
 
 
 def _fetch_bars(symbol, days=60):
@@ -830,7 +905,25 @@ async def run_orchestrated_cycle(send_telegram=None):
 
         if action == "sell":
             try:
+                # Get exit price for IC tracking
+                exit_price = exit_sig.get("current_price", 0)
+                
                 result = await sell_stock_asset(symbol, reason)
+                
+                # Record exit for IC tracking
+                if IC_TRACKING_ENABLED and exit_price > 0:
+                    try:
+                        # Get benchmark return (approximate SPY)
+                        benchmark_return = 0.0  # TODO: Fetch actual SPY return
+                        record_trade_exit(
+                            symbol=symbol,
+                            exit_price=exit_price,
+                            exit_reason=reason,
+                            benchmark_return=benchmark_return
+                        )
+                    except Exception as e:
+                        logger.error(f"IC exit recording failed: {e}")
+                
                 actions_taken.append(f"SELL {symbol}: {reason}")
                 risk.record_trade(symbol, win=False)
                 logger.info(f"EXIT {symbol}: {reason}")
@@ -853,7 +946,38 @@ async def run_orchestrated_cycle(send_telegram=None):
 
     # 3-6. Screen, score, risk-check, RL-gate
     if ps.cash > 15 and ps.cash_reserve_pct > 0.08:  # Only screen if we have capital
+        # Get candidates from both traditional screening and high-ROI scanners
         candidates = screen_universe(max_candidates=5)
+        
+        # Add scanner opportunities if available
+        if SCANNERS_ENABLED:
+            try:
+                finder = OpportunityFinder()
+                scanner_opps = finder.get_top_opportunities(limit=5)
+                
+                for opp in scanner_opps:
+                    # Convert scanner format to candidate format
+                    scanner_candidate = {
+                        'symbol': opp['symbol'],
+                        'score': opp['score'],
+                        'confidence': opp['score'] / 100.0,  # Normalize to 0-1
+                        'action': 'strong_buy',  # High-ROI opportunities
+                        'strategy': f"{opp['opportunity_type'].lower()}_scanner",
+                        'current_price': opp.get('current_price') or opp.get('price', 0),
+                        'stop_loss': opp.get('stop_loss', opp.get('current_price', 0) * 0.95),
+                        'take_profit': opp.get('take_profit', opp.get('current_price', 0) * 1.15),
+                        'atr_pct': opp.get('atr_pct', 0.02),
+                        'rsi': opp.get('rsi', 50),
+                        'adx': opp.get('adx', 25),
+                        'opportunity_type': opp['opportunity_type'],
+                        'entry_time': opp['entry_time'],
+                        'from_scanner': True
+                    }
+                    candidates.append(scanner_candidate)
+                
+                logger.info(f"Added {len(scanner_opps)} scanner opportunities to candidate pool")
+            except Exception as e:
+                logger.error(f"Scanner integration failed: {e}")
 
         for candidate in candidates:
             symbol = candidate["symbol"]
@@ -875,12 +999,58 @@ async def run_orchestrated_cycle(send_telegram=None):
                 logger.info(f"Skip {symbol}: confidence {final_conf:.2f} < 0.55")
                 continue
 
+            # Monte Carlo tail risk check
+            mc_approved_size = None
+            if MONTE_CARLO_ENABLED:
+                try:
+                    # Get historical returns
+                    hist_returns = _get_historical_returns(symbol, days=90)
+                    
+                    if len(hist_returns) >= 20:
+                        # Initial position size estimate (will be refined by position sizer)
+                        initial_size_pct = min(0.20, final_conf * 0.30)  # Max 20% or conf * 30%
+                        
+                        # Run tail risk check
+                        mc_approved, mc_size, mc_analysis = check_tail_risk_monte_carlo(
+                            symbol=symbol,
+                            historical_returns=hist_returns,
+                            kelly_fraction=final_conf,
+                            proposed_size=initial_size_pct,
+                            max_drawdown_tolerance=0.25  # 25% max p95 drawdown
+                        )
+                        
+                        if not mc_approved:
+                            logger.warning(f"MONTE CARLO BLOCK: {symbol} tail risk too high")
+                            continue
+                        
+                        if mc_size < initial_size_pct * 0.5:  # Reduced by 50%+
+                            logger.warning(
+                                f"{symbol} Monte Carlo size reduction: "
+                                f"{initial_size_pct:.1%} → {mc_size:.1%}"
+                            )
+                        
+                        mc_approved_size = mc_size
+                        
+                except Exception as e:
+                    logger.error(f"Monte Carlo check failed for {symbol}: {e}")
+
             # Position sizing
             sizing = risk.calculate_position_size(
                 candidate["current_price"],
                 candidate["stop_loss"],
                 ps.portfolio_value
             )
+            
+            # Apply Monte Carlo size adjustment if available
+            if mc_approved_size is not None:
+                mc_dollar_size = ps.portfolio_value * mc_approved_size
+                if mc_dollar_size < sizing["dollar_amount"]:
+                    logger.info(
+                        f"{symbol} applying Monte Carlo size limit: "
+                        f"${sizing['dollar_amount']:.2f} → ${mc_dollar_size:.2f}"
+                    )
+                    sizing["dollar_amount"] = mc_dollar_size
+                    sizing["shares"] = int(mc_dollar_size / candidate["current_price"])
 
             if sizing["shares"] < 1:
                 logger.info(f"Skip {symbol}: position size < 1 share")
@@ -899,6 +1069,26 @@ async def run_orchestrated_cycle(send_telegram=None):
             try:
                 result = await buy_stock_asset(symbol, qty=sizing["shares"])
                 if result:
+                    # Record entry for IC tracking
+                    if IC_TRACKING_ENABLED:
+                        try:
+                            record_trade_entry(
+                                symbol=symbol,
+                                entry_price=candidate["current_price"],
+                                strategy=candidate["strategy"],
+                                alpha_score=alpha_score,
+                                signal_details={
+                                    'rsi': candidate.get('rsi', 50),
+                                    'adx': candidate.get('adx', 25),
+                                    'volume_ratio': candidate.get('volume_ratio', 1.0),
+                                    'confidence': final_conf,
+                                    'from_scanner': candidate.get('from_scanner', False)
+                                },
+                                quantity=sizing["shares"]
+                            )
+                        except Exception as e:
+                            logger.error(f"IC entry recording failed: {e}")
+                    
                     # Place trailing stop
                     try:
                         trail_pct = max(3.0, min(10.0, candidate["atr_pct"] * 200))
