@@ -1,0 +1,17 @@
+[Unit]
+Description=Trading Bot - Strategy V2
+After=network.target
+
+[Service]
+ExecStartPre=/bin/sleep 10
+ExecStart=/home/jonathangan/shared/stockbot/bin/python /home/jonathangan/shared/stockbot/strategy_v2/main_wrapper.py
+WorkingDirectory=/home/jonathangan/shared/stockbot/strategy_v2
+User=jonathangan
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=10
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
