@@ -60,27 +60,28 @@ def api_portfolio():
         account = alpaca_client.get_account()
         positions = alpaca_client.get_positions()
         
-        # Calculate total P/L
-        total_pl = sum(float(p.unrealized_pl) for p in positions)
-        total_pl_pct = (total_pl / float(account.portfolio_value)) * 100 if float(account.portfolio_value) > 0 else 0
+        # Calculate total P/L (positions are dicts, not objects)
+        total_pl = sum(float(p.get('unrealized_pl', 0)) for p in positions)
+        portfolio_value = float(account.get('portfolio_value', 1))
+        total_pl_pct = (total_pl / portfolio_value) * 100 if portfolio_value > 0 else 0
         
         return jsonify({
-            'portfolio_value': float(account.portfolio_value),
-            'cash': float(account.cash),
-            'buying_power': float(account.buying_power),
-            'equity': float(account.equity),
+            'portfolio_value': portfolio_value,
+            'cash': float(account.get('cash', 0)),
+            'buying_power': float(account.get('buying_power', 0)),
+            'equity': float(account.get('equity', 0)),
             'total_pl': total_pl,
             'total_pl_pct': total_pl_pct,
             'positions': [
                 {
-                    'symbol': p.symbol,
-                    'qty': float(p.qty),
-                    'market_value': float(p.market_value),
-                    'unrealized_pl': float(p.unrealized_pl),
-                    'unrealized_plpc': float(p.unrealized_plpc),
-                    'current_price': float(p.current_price),
-                    'avg_entry_price': float(p.avg_entry_price),
-                    'cost_basis': float(p.cost_basis)
+                    'symbol': p.get('symbol', ''),
+                    'qty': float(p.get('qty', 0)),
+                    'market_value': float(p.get('market_value', 0)),
+                    'unrealized_pl': float(p.get('unrealized_pl', 0)),
+                    'unrealized_plpc': float(p.get('unrealized_plpc', 0)),
+                    'current_price': float(p.get('current_price', 0)),
+                    'avg_entry_price': float(p.get('avg_entry_price', 0)),
+                    'cost_basis': float(p.get('cost_basis', 0))
                 }
                 for p in positions
             ],
