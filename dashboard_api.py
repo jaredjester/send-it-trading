@@ -26,7 +26,8 @@ from core.alpaca_client import AlpacaClient
 
 # Initialize clients
 try:
-    alpaca_client = AlpacaClient()
+    # Use LIVE API (not paper trading)
+    alpaca_client = AlpacaClient(base_url="https://api.alpaca.markets")
     ALPACA_AVAILABLE = True
 except Exception as e:
     print(f"⚠️  Alpaca client unavailable: {e}")
