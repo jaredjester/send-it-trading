@@ -1,0 +1,113 @@
+strategy_v2/
+│
+├── 🤖 CORE BOT (Active - Do Not Delete)
+│   ├── orchestrator_simple.py       # Main trading logic
+│   ├── main_wrapper_simple.py       # 30-minute cycle runner
+│   ├── conviction_manager.py        # GME protection system
+│   ├── alpha_engine.py             # Multi-factor scoring
+│   └── master_config.json          # Configuration
+│
+├── 🔧 CORE MODULES
+│   └── core/
+│       ├── alpaca_client.py        # API client
+│       ├── config.py               # Config loader
+│       ├── monte_carlo.py          # Tail risk simulation
+│       └── sizing.py               # Kelly position sizing
+│
+├── 🔍 SCANNERS
+│   └── scanners/
+│       ├── morning_gap_scanner.py  # Gap opportunities
+│       ├── catalyst_scanner.py     # News-driven plays
+│       ├── opportunity_finder.py   # Combined scanner
+│       └── test_scanners.py        # Scanner tests
+│
+├── 📊 EVALUATION
+│   └── evaluation/
+│       ├── alpha_tracker.py        # IC measurement
+│       ├── backtest_engine.py      # Historical testing
+│       ├── decision_logger.py      # Trade audit trail
+│       ├── deployment_gate.py      # Pre-deploy validation
+│       ├── ic_integration.py       # Signal quality tracking
+│       └── rapid_iteration.py      # Fast experimentation
+│
+├── 📈 DATA SOURCES
+│   └── data_sources/
+│       ├── alt_data_aggregator_safe.py  # Working sources
+│       ├── google_trends.py             # Search trends
+│       ├── options_flow.py              # Options data
+│       ├── stocktwits_sentiment.py      # Social sentiment
+│       └── (others - some broken)
+│
+├── 💰 ANALYTICS
+│   └── analytics/
+│       └── profit_tracker.py       # Performance tracking
+│
+├── 🌐 WEB DASHBOARD
+│   ├── dashboard_api.py            # Flask API
+│   └── templates/
+│       └── live_dashboard.html     # Web interface
+│
+├── 🧪 TESTS
+│   └── tests/
+│       ├── test_core.py
+│       ├── test_monte_carlo.py
+│       ├── test_evaluation.py
+│       └── ...
+│
+├── 📁 STATE & DATA
+│   ├── state/                      # Persistent state
+│   │   ├── convictions.json        # Active convictions
+│   │   └── conviction_history.json # Historical convictions
+│   ├── data/                       # Market data cache
+│   └── logs/                       # Trading logs
+│       └── trading.log
+│
+├── 📦 ARCHIVE (Future Features)
+│   └── archive/
+│       └── future-features/
+│           ├── options_strategy.py      # Options trading
+│           ├── risk_fortress.py         # Advanced risk mgmt
+│           ├── portfolio_optimizer.py   # Rebalancing
+│           └── trade_journal.py         # Audit trail
+│
+├── 📚 DOCUMENTATION
+│   ├── README.md                   # Main documentation
+│   ├── ARCHITECTURE.md             # System design
+│   ├── CONTRIBUTING.md             # Development guide
+│   ├── PROJECT_STATUS.md           # Current status
+│   └── DIRECTORY_STRUCTURE.txt     # This file
+│
+├── 🛠️ UTILITIES
+│   ├── check_portfolio.py          # Portfolio checker
+│   ├── deploy_send_it_mode.py      # Deploy conviction
+│   ├── setup_gme_conviction.py     # Setup GME
+│   ├── sector_map.py               # Sector mapping
+│   └── patch_main.py               # Legacy patcher
+│
+└── ⚙️ CONFIG FILES
+    ├── .gitignore
+    ├── master_config.json
+    ├── requirements.txt
+    └── .env (not in git)
+
+═══════════════════════════════════════════════════════
+Total Lines of Code: ~15,000
+Active Bot: ~500 lines (orchestrator_simple.py)
+Documentation: ~2,500 lines
+Tests: ~800 lines
+═══════════════════════════════════════════════════════
+
+Key:
+🤖 = Active in production (critical)
+🔧 = Core infrastructure
+🔍 = Opportunity detection
+📊 = Performance measurement
+📈 = Data gathering
+💰 = Analytics
+🌐 = Web interface
+🧪 = Testing
+📁 = Data storage
+📦 = Archived/future
+📚 = Documentation
+🛠️ = Utilities
+⚙️ = Configuration
