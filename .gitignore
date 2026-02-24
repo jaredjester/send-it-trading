@@ -6,78 +6,31 @@ __pycache__/
 .Python
 env/
 venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Environment variables (DO NOT COMMIT)
+# Environment
 .env
-.env.*
-!.env.example
-*.env
-secrets.json
-credentials.json
-
-# Config with secrets (use master_config.example.json as template)
-master_config.json
-
-# API Keys and sensitive data
-*_keys.json
-*_secrets.py
-config_production.json
+.env.local
 
 # Logs
+logs/*.log
 *.log
-logs/
-*.jsonl
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# State files (contain live positions)
-state/
-backtest_results.db
-alpha_metrics.json
-deployment_log.jsonl
+# State files
+state/*.json.bak
+data/alt_data/*.json
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
+
+# OS
 .DS_Store
-._*
+Thumbs.db
 
-# Backup files
-*.backup
-*.bak
-*.backup_*
-
-# Documentation build
-docs/_build/
-site/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
+# Temporary
+*.tmp
+*.temp
+risk_state.json
