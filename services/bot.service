@@ -1,0 +1,19 @@
+[Unit]
+Description=Send It Trading — Intelligence Bot (news/insider/polymarket scanners)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/send-it-trading
+ExecStart=/usr/bin/python3 %h/send-it-trading/bot/main.py
+Restart=on-failure
+RestartSec=30
+EnvironmentFile=%h/send-it-trading/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=send-it-bot
+
+[Install]
+WantedBy=multi-user.target

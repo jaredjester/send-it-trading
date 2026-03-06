@@ -1,0 +1,13 @@
+alpaca:
+  key: +ALPACA_KEY_FROM_ENV
+  secret: +ALPACA_SECRET_FROM_ENV
+  paper: true
+forecast:
+  price_model: GBM
+  vol_model: MEAN_REVERTING
+risk:
+  delta: 50
+  gamma: 100
+  vega: 500
+kelly:
+  fractional: 0.25

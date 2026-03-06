@@ -1,0 +1,20 @@
+[Unit]
+Description=Send It Trading — Options Engine (alpha scoring + execution)
+After=network.target send-it-bot.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/send-it-trading
+ExecStartPre=/bin/sleep 15
+ExecStart=/usr/bin/python3 %h/send-it-trading/engine/main_wrapper_simple.py
+Restart=always
+RestartSec=10
+EnvironmentFile=%h/send-it-trading/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=send-it-engine
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

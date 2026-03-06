@@ -1,50 +1,34 @@
+# Secrets
+.env
+
+# Runtime data (generated at runtime — not source code)
+data/*
+!data/.gitkeep
+state/*
+!state/.gitkeep
+logs/*
+!logs/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
 env/
 venv/
+.venv/
 *.egg-info/
+dist/
+build/
 
-# Environment
-.env
-.env.local
-
-# Logs
-logs/*.log
-*.log
-
-# State files
-state/*.json.bak
-data/alt_data/*.json
+# Backups & scratch
+*.bak
+*.bak.*
+*.bak*
+reports/
+analytics/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temporary
-*.tmp
-*.temp
-risk_state.json
-
-# RL/eval runtime state
-evaluation/live_config.json
-evaluation/threshold_bandit.json
-evaluation/learning_state.json
-evaluation/optimizer_*.jsonl
-
-# Market state
-state/convictions.json
-state/breaker_state.json
-state/latest_signals.json
-state/market_open_plan.json
-scanner_signals.json
-*.bak*
