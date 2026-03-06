@@ -48,7 +48,7 @@ class GapScanner:
             'SPY', 'QQQ', 'IWM', 'XLF', 'XLE', 'XLK', 'XLV'
         ]
     
-    def scan_gaps(self, min_gap_pct: float = 5.0) -> List[Dict]:
+    def scan_gaps(self, min_gap_pct: float = 3.0) -> List[Dict]:
         """
         Scan for stocks gapping up pre-market.
         

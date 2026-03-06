@@ -34,3 +34,17 @@ Thumbs.db
 *.tmp
 *.temp
 risk_state.json
+
+# RL/eval runtime state
+evaluation/live_config.json
+evaluation/threshold_bandit.json
+evaluation/learning_state.json
+evaluation/optimizer_*.jsonl
+
+# Market state
+state/convictions.json
+state/breaker_state.json
+state/latest_signals.json
+state/market_open_plan.json
+scanner_signals.json
+*.bak*
