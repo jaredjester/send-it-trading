@@ -12,6 +12,7 @@ import time
 import zoneinfo
 
 BASE_DIR = Path(__file__).parent
+REPO_DIR = BASE_DIR.parent
 sys.path.insert(0, str(BASE_DIR))
 
 import requests as _requests
@@ -98,7 +99,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(BASE_DIR / 'logs/trading.log'),
+        logging.FileHandler(REPO_DIR / 'logs/trading.log'),
         logging.StreamHandler()
     ]
 )
