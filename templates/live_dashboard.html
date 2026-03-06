@@ -779,7 +779,7 @@
   }
 
   function onStatus(s) {
-    const svc=(s.services||{})['mybot']||(s.services||{})['options_v1_bot']||{};
+    const svc=Object.values(s.services||{})[0]||{};
     $('bot-badge').textContent=svc.running?'RUNNING':'STOPPED';
     $('bot-badge').className='badge '+(svc.running?'badge-g':'badge-r');
     $('bot-time').textContent = (svc.activity||'—');

@@ -1,193 +1,131 @@
-# Strategy V2 - Autonomous Trading Bot
+# 🚀 Send It Trading
 
-**Status:** ✅ Operational  
-**Started:** February 23, 2026  
-**Current Version:** Simple Orchestrator v1.0
+Options-first algorithmic trading bot with a live web dashboard. Uses Alpaca's Options API with Thompson Sampling RL to learn optimal trading thresholds.
 
----
+## What It Does
 
-## 🎯 What This Is
+- **Options-first execution** — every signal tries options first, falls back to stock
+- **Multi-factor alpha scoring** — momentum, mean reversion, sentiment, Finviz signals
+- **RL threshold learning** — Thompson Sampling bandit learns optimal score thresholds per market regime
+- **Live dashboard** — real-time portfolio, P&L, plans, trades, signals, and RL state via SSE
+- **Risk management** — max premium caps, stop losses, expiry guards, position limits
 
-Autonomous stock trading bot running on Raspberry Pi that:
-- Cleans up zombie positions (>90% loss)
-- Scans for high-probability opportunities (gap + catalyst)
-- Manages conviction positions (GME protection)
-- Executes trades via Alpaca API
-- Runs 24/7 with 30-minute cycles
+## Quick Start
 
-**Performance:** Conservative capital preservation with opportunistic entries.
+```bash
+# 1. Clone
+git clone https://github.com/jaredjester/send-it-trading.git
+cd send-it-trading
 
----
+# 2. Install dependencies
+pip install -r requirements.txt
 
-## 🏗️ Architecture
+# 3. Configure
+cp .env.example .env
+# Edit .env — add your Alpaca API key + secret (minimum required config)
+
+# 4. Run the dashboard
+python dashboard_api.py
+# → http://localhost:5555
+
+# 5. Run the trading bot
+python main_wrapper_simple.py
+```
+
+## Configuration
+
+All config lives in `.env`. The only required values are your Alpaca credentials:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ALPACA_API_KEY` | ✅ | — | Alpaca API key |
+| `ALPACA_API_SECRET` | ✅ | — | Alpaca API secret |
+| `ALPACA_PAPER` | No | `false` | Use paper trading |
+| `DASHBOARD_PORT` | No | `5555` | Dashboard web port |
+| `BOT_SERVICE` | No | `mybot` | Systemd service name |
+| `DATA_DIR` | No | `./data` | Intel data directory |
+| `STATE_DIR` | No | `./state` | Runtime state directory |
+| `LOG_DIR` | No | `./logs` | Trading log directory |
+| `EVAL_DIR` | No | `./evaluation` | RL/evaluation state |
+
+### Trading Parameters
+
+Tunable params live in `evaluation/live_config.json` and `master_config.json`. The overnight optimizer and RL threshold learner adjust these automatically.
+
+Key params:
+- `min_score_threshold` — minimum alpha score to trade (learned by RL)
+- `max_premium` — max option premium per contract ($1.50 default)
+- `min_open_interest` — minimum OI for contract selection (10)
+- `stop_loss_pct` — stop loss percentage (-50%)
+- `take_profit_pct` — take profit percentage (+100%)
+
+## Architecture
 
 ```
-orchestrator_simple.py (Main trading logic)
+send-it-trading/
+├── dashboard_api.py          # Flask dashboard (REST + SSE)
+├── orchestrator_simple.py    # Main trading loop
+├── main_wrapper_simple.py    # Entry point with crash recovery
 ├── core/
-│   ├── alpaca_client.py (API client)
-│   ├── config.py (Config loader)
-│   ├── monte_carlo.py (Tail risk simulation)
-│   └── sizing.py (Kelly position sizing)
+│   ├── alpaca_client.py      # Alpaca API wrapper
+│   ├── options_trader.py     # Options execution engine
+│   └── dynamic_config.py     # Hot-reload config from live_config.json
+├── rl/
+│   ├── threshold_learner.py  # Thompson Sampling bandit
+│   └── episode_bridge.py     # Market event → RL episode wiring
 ├── scanners/
-│   ├── morning_gap_scanner.py (Gap opportunities)
-│   └── catalyst_scanner.py (News-driven plays)
-├── conviction_manager.py (GME protection)
-├── alpha_engine.py (Multi-factor scoring)
-└── main_wrapper_simple.py (30-min cycle wrapper)
+│   ├── finviz_scanner.py     # Momentum/oversold/breakout/insider/PEAD
+│   ├── morning_gap_scanner.py
+│   └── run_scanners.py
+├── evaluation/
+│   ├── live_config.json      # Dynamic trading parameters
+│   └── threshold_bandit.json # RL bandit state
+├── data/                     # Intel data (auto-generated)
+├── state/                    # Runtime state (plans, trades)
+├── logs/                     # Trading logs
+├── templates/
+│   └── live_dashboard.html   # Dashboard frontend
+├── .env.example              # Config template
+├── requirements.txt
+└── master_config.json        # Alpha engine weights
 ```
 
----
+## Dashboard
 
-## 🚀 Running the Bot
+The dashboard runs at `http://localhost:5555` and shows:
 
-**Start:**
+- **Portfolio** — positions, P&L, options vs equity split
+- **Market Stance** — news sentiment, VIX regime, confidence
+- **Trade Plans** — open/closed plans with thesis and P&L
+- **Signal Heatmap** — per-symbol signal strength
+- **RL Threshold** — Thompson Sampling bandit learning state
+- **Live Logs** — real-time bot activity
+
+All data streams via Server-Sent Events (SSE) — no polling, no WebSocket setup.
+
+## Deployment (systemd)
+
 ```bash
-sudo systemctl start mybot_full
+# Copy the service file
+sudo cp mybot.service /etc/systemd/system/mybot.service
+# Edit paths in the service file to match your install location
+sudo systemctl daemon-reload
+sudo systemctl enable mybot
+sudo systemctl start mybot
+
+# Same for the dashboard
+sudo cp dashboard.service /etc/systemd/system/dashboard.service
+sudo systemctl daemon-reload
+sudo systemctl enable dashboard
+sudo systemctl start dashboard
 ```
 
-**Status:**
-```bash
-sudo systemctl status mybot_full
-```
+## Requirements
 
-**Logs (live):**
-```bash
-journalctl -u mybot_full -f
-```
+- Python 3.9+
+- Alpaca account with Options Level 1+ (Level 3 recommended)
+- ~$200+ buying power (works with small accounts)
 
-**Logs (file):**
-```bash
-tail -f logs/trading.log
-```
+## License
 
----
-
-## 📊 Web Dashboard
-
-**API:** http://192.168.12.44:5555  
-**Service:** `dashboard.service`
-
-**Endpoints:**
-- `/api/health` - Service health
-- `/api/portfolio` - Current positions
-- `/api/convictions` - Active convictions
-- `/api/status` - Trading status
-- `/api/logs` - Recent log entries
-
----
-
-## 🛡️ Risk Management
-
-**Capital Preservation:**
-- Max position: 15% of portfolio
-- Max exposure: 95% of portfolio
-- Min cash reserve: $50
-- Zombie cleanup: >90% loss OR <$1 value
-
-**Conviction Protection:**
-- GME: Protected from concentration limits
-- No forced exits on conviction positions
-- Thesis-based exits only
-
----
-
-## 🔧 Configuration
-
-**Master config:** `master_config.json`
-
-Key settings:
-- `max_position_pct`: 0.15 (15% max per position)
-- `zombie_loss_threshold`: -0.90 (90% loss = zombie)
-- `min_position_value`: 1.0 ($1 minimum)
-- `kelly_fraction`: 0.25 (quarter-Kelly sizing)
-
----
-
-## 📁 Directory Structure
-
-```
-strategy_v2/
-├── orchestrator_simple.py       # Main bot
-├── main_wrapper_simple.py       # Cycle runner
-├── conviction_manager.py        # GME protection
-├── alpha_engine.py             # Scoring engine
-├── master_config.json          # Configuration
-├── core/                       # Core utilities
-├── scanners/                   # Opportunity scanners
-├── evaluation/                 # Performance tracking
-├── data_sources/              # Alternative data
-├── templates/                  # Web dashboard HTML
-├── logs/                       # Trading logs
-└── archive/                    # Future features
-    └── future-features/        # Options, advanced risk, etc.
-```
-
----
-
-## 🔮 Future Features (Archived)
-
-Located in `archive/future-features/`:
-- `options_strategy.py` - Options trading
-- `risk_fortress.py` - Advanced risk management
-- `portfolio_optimizer.py` - Rebalancing, tax-loss harvesting
-- `trade_journal.py` - Detailed audit trail
-
----
-
-## 🐛 Troubleshooting
-
-**Bot not trading?**
-1. Check if market is open: `journalctl -u mybot_full | grep "Market"`
-2. Check scanners: `journalctl -u mybot_full | grep "scanner"`
-3. Check for errors: `journalctl -u mybot_full | grep ERROR`
-
-**Orders rejected?**
-- Zombie stocks may be untradeable (too low value)
-- Check Alpaca account status
-- Verify API keys in .env
-
-**Bot crashed?**
-```bash
-sudo systemctl restart mybot_full
-journalctl -u mybot_full -n 100
-```
-
----
-
-## 📝 Maintenance
-
-**Weekly:**
-- Review logs for errors
-- Check portfolio performance
-- Verify conviction status
-
-**Monthly:**
-- Review scanner performance (IC tracking)
-- Tune thresholds if needed
-- Clean up old logs
-
----
-
-## 🤝 Contributing
-
-This is a personal trading bot. Code is open-sourced for transparency and learning.
-
-**Guidelines:**
-- Keep it simple (KISS principle)
-- Test before deploying
-- Log everything
-- Document decisions
-
----
-
-## ⚠️ Disclaimer
-
-This bot trades real money. Use at your own risk. Past performance does not guarantee future results. 
-
-**Not financial advice.**
-
----
-
-_Last updated: 2026-02-23_  
-_Version: 1.0_  
-_Status: Operational_
+MIT
