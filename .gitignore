@@ -1,7 +1,7 @@
 # Secrets
 .env
 
-# Runtime data (generated at runtime — not source code)
+# Runtime data — generated at runtime, never commit these
 data/*
 !data/.gitkeep
 state/*
@@ -13,22 +13,14 @@ logs/*
 __pycache__/
 *.py[cod]
 *.so
-.Python
-env/
-venv/
-.venv/
 *.egg-info/
 dist/
 build/
+.venv/
+venv/
+env/
 
-# Backups & scratch
+# Junk
 *.bak
 *.bak.*
-*.bak*
-reports/
-analytics/
-
-# IDE
-.vscode/
-.idea/
-*.swp
+.DS_Store
