@@ -101,11 +101,13 @@ def _cycle_report(cycle_num: int, orchestrator, secs_until_next: float):
     msg = chr(10).join(lines)
     _tg(msg)
 
+_LOG_DIR = Path(os.getenv('LOG_DIR', str(REPO_DIR / 'engine' / 'logs')))
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
     level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Path(os.getenv('LOG_DIR', str(REPO_DIR / 'engine' / 'logs'))) / 'trading.log'),
+        logging.FileHandler(_LOG_DIR / 'trading.log'),
         logging.StreamHandler()
     ]
 )
