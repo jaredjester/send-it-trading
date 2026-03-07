@@ -409,14 +409,13 @@ class SimpleOrchestrator:
         # Fallback: if ALL scanners found nothing, score the dynamic watchlist
         if not opportunities:
             watchlist = cfg("watchlist")
-            logger.info(f"No scanner hits — falling back to watchlist ({len(watchlist)} symbols)")
+            logger.warning(f"⚠️  All scanners returned 0 hits — watchlist fallback ({len(watchlist)} symbols)")
             for sym in watchlist:
                 opportunities.append({
                     "symbol": sym,
                     "score": 60,
-                    "type": "watchlist",
+                    "type": "watchlist_fallback",
                 })
-            logger.info(f"Watchlist fallback: {len(opportunities)} candidates")
 
         return opportunities
 
@@ -770,8 +769,9 @@ class SimpleOrchestrator:
         self._cycle_is_afterhours   = True
         self._cycle_total_candidates = len(scored)
         self._cycle_top = [
-            (c.get("score", 0), c.get("symbol", ""), c.get("type", ""))
+            (c.get("score", 0), c.get("symbol", ""), c.get("type") or c.get("sig_type") or "unknown")
             for c in top
+            if c.get("score", 0) > 0  # never surface zero-score candidates
         ]
         # Fetch portfolio for report (non-blocking best-effort)
         try:
@@ -853,8 +853,8 @@ class SimpleOrchestrator:
             for opp in opportunities:
                 sym   = opp.get("symbol", "")
                 score = opp.get("score", 0)
-                stype = opp.get("type", "")
-                if sym and score:
+                stype = opp.get("sig_type") or opp.get("type") or "unknown"
+                if sym and score > 0:
                     _scored_this_cycle.append((score, sym, stype))
             self._cycle_top = sorted(_scored_this_cycle, reverse=True)[:10]
             self._cycle_total_candidates = len(opportunities)

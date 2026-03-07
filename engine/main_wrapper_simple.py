@@ -87,10 +87,12 @@ def _cycle_report(cycle_num: int, orchestrator, secs_until_next: float):
             lines.append("<b>Battle plan (top picks):</b>")
             for score, sym, stype in top[:5]:
                 flag = "✅" if score >= 63 else "🔶" if score >= 40 else "⬜"
-                stype_short = stype.replace("finviz_", "")
+                stype_short = stype.replace("finviz_", "").replace("_fallback", "⚠️fbk")
                 lines.append(f"  {flag} {sym:8s} {score:.1f} [{stype_short}]")
+            if any(t[2].endswith("watchlist_fallback") for t in top[:5]):
+                lines.append("  ⚠️ <i>Scanners offline — watchlist used</i>")
         else:
-            lines.append("  (no candidates above 0)")
+            lines.append("  ⚪ No qualifying candidates")
     else:
         # Market-hours report
         lines = [
