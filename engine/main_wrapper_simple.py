@@ -24,10 +24,14 @@ from orchestrator_simple import SimpleOrchestrator
 
 _TG_TOKEN = "7789884565:AAFm8-xf3zffBKvMJCen3U1B4h7Ph5UMdBU"
 _TG_CHAT  = "-1002553012880"  # stockbot group channel
+_WORKER_ID = os.getenv("WORKER_ID", "live")
+_ALPACA_MODE = os.getenv("ALPACA_MODE", "live")
 
 
 def _tg(msg: str):
-    """Fire-and-forget Telegram message."""
+    """Fire-and-forget Telegram message (live engine only)."""
+    if _ALPACA_MODE != "live" or _WORKER_ID not in ("live", "", None):
+        return
     try:
         _requests.post(
             f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage",
