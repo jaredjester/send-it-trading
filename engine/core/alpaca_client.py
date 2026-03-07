@@ -62,7 +62,9 @@ class AlpacaClient:
                 "environment variables or add to master_config.json"
             )
 
-        self.base_url = base_url or acct.get("alpaca_base_url", "https://paper-api.alpaca.markets")
+        self.base_url = (base_url
+                         or os.getenv("ALPACA_BASE_URL")
+                         or acct.get("alpaca_base_url", "https://paper-api.alpaca.markets"))
         self.data_url = data_url or acct.get("alpaca_data_url", "https://data.alpaca.markets")
         self.feed = acct.get("data_feed", "iex")
         self.cache_ttl = cache_ttl

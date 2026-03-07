@@ -60,6 +60,12 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "aggressive"
+      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/aggressive/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.70, "mean_reversion.score_weight": 0.20,
@@ -79,6 +85,12 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "balanced"
+      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/balanced/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.55, "mean_reversion.score_weight": 0.35,
@@ -98,6 +110,12 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "conservative"
+      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/conservative/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.40, "mean_reversion.score_weight": 0.40,
@@ -117,6 +135,12 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "momentum"
+      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
+      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
+      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/momentum/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.80, "mean_reversion.score_weight": 0.10,
