@@ -1,11 +1,4 @@
 {
-  "account": {
-    "alpaca_api_key": "AKYI7MN9ZH5X44DNDH6K",
-    "alpaca_secret_key": "GAXKFKznNRreycPzRXnOz4ashGMwWUietfRKLsdr",
-    "alpaca_base_url": "https://paper-api.alpaca.markets",
-    "alpaca_data_url": "https://data.alpaca.markets",
-    "data_feed": "iex"
-  },
   "portfolio": {
     "max_position_pct": 0.2,
     "max_sector_pct": 0.3,
@@ -45,19 +38,7 @@
   },
   "sector_rotation": {
     "enabled": true,
-    "sectors": [
-      "XLK",
-      "XLF",
-      "XLE",
-      "XLV",
-      "XLY",
-      "XLI",
-      "XLB",
-      "XLP",
-      "XLU",
-      "XLRE",
-      "XLC"
-    ],
+    "sectors": ["XLK","XLF","XLE","XLV","XLY","XLI","XLB","XLP","XLU","XLRE","XLC"],
     "top_sectors_count": 3,
     "bottom_sectors_count": 3,
     "recompute_interval_days": 7,
@@ -72,34 +53,27 @@
     "negative_threshold": 0.4,
     "score_weight": 0.2
   },
+  "options": {
+    "max_premium": 1.50,
+    "min_open_interest": 10,
+    "stop_loss_pct": 0.50,
+    "take_profit_pct": 1.00,
+    "expiry_min_days": 14,
+    "expiry_max_days": 35,
+    "max_contracts": 1
+  },
   "execution_gate": {
     "min_confidence": 0.5,
     "medium_confidence": 0.65,
     "high_confidence": 0.8,
     "very_high_confidence": 0.9,
     "rl_weight": 0.3,
-    "alpha_weight": 0.7,
-    "rl_state_path": "/home/jonathangan/shared/stockbot/adaptive/q_state.json"
-  },
-  "tax_loss_harvesting": {
-    "enabled": true,
-    "loss_threshold_pct": 0.05,
-    "min_hold_days": 30,
-    "wash_sale_days": 30,
-    "year_end_window_days": 45
+    "alpha_weight": 0.7
   },
   "correlation": {
     "enabled": true,
     "max_correlation": 0.8,
-    "lookback_days": 30,
-    "check_interval_days": 7
-  },
-  "benchmark": {
-    "symbol": "SPY",
-    "trailing_threshold_pct": 0.1,
-    "beating_threshold_pct": 0.05,
-    "lookback_days": 30,
-    "state_file": "/Users/jon/.openclaw/workspace/strategy-v2/benchmark_state.json"
+    "lookback_days": 30
   },
   "data": {
     "max_bars": 200,
@@ -107,13 +81,5 @@
     "retry_attempts": 3,
     "retry_delay_seconds": 2
   },
-  "logging": {
-    "level": "INFO",
-    "log_file": "/Users/jon/.openclaw/workspace/strategy-v2/trading.log",
-    "max_bytes": 10485760,
-    "backup_count": 5
-  },
-  "untradeable_symbols": [
-    "AVGR"
-  ]
+  "untradeable_symbols": ["AVGR", "BGXXQ", "MOTS"]
 }

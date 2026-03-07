@@ -24,3 +24,12 @@ env/
 *.bak
 *.bak.*
 .DS_Store
+
+# Evolution runtime outputs
+evolution/workers/*/state/*
+evolution/workers/*/logs/*
+evolution/results/*
+evolution/champion.json
+!evolution/workers/*/state/.gitkeep
+!evolution/workers/*/logs/.gitkeep
+!evolution/results/.gitkeep
