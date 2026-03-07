@@ -67,10 +67,10 @@ jobs:
             FAILED=1
           fi
 
-          # master_config.json references (retired)
+          # master_config.json references (retired) — allow in comments only
           if grep -rn "master_config\.json" engine/ bot/ --include="*.py" 2>/dev/null \
-              | grep -v "DEPRECATED\|deprecated\|# \|docstring"; then
-            echo "❌ master_config.json references found — use dynamic_config.cfg()"
+              | grep -v "DEPRECATED\|deprecated\|docstring\|#.*master_config"; then
+            echo "❌ master_config.json references found in non-comment code — use dynamic_config.cfg()"
             FAILED=1
           fi
 
@@ -162,17 +162,32 @@ jobs:
           fi
           echo "✅ No silent exception swallowing"
 
-      - name: Check print() usage in engine (should use logger)
+      - name: Check print() in core execution path (should use logger)
         run: |
-          # Allow print in __main__ blocks and test files only
-          HITS=$(grep -rn "^\s*print(" engine/ --include="*.py" \
-            | grep -v "# noqa\|if __name__" || true)
+          # Only check the hot execution path — not CLI/data_source scripts
+          # data_sources/, scanners/ __main__ blocks, and evaluation/ CLI tools
+          # intentionally use print() for human-readable output when run directly
+          CORE_FILES="engine/orchestrator_simple.py engine/main_wrapper_simple.py engine/alpha_engine.py"
+          CORE_DIRS="engine/core engine/rl"
+
+          HITS=""
+          for f in $CORE_FILES; do
+            if [ -f "$f" ]; then
+              FOUND=$(grep -n "^\s*print(" "$f" | grep -v "# noqa" || true)
+              if [ -n "$FOUND" ]; then HITS="$HITS\n$f:\n$FOUND"; fi
+            fi
+          done
+          for d in $CORE_DIRS; do
+            FOUND=$(grep -rn "^\s*print(" "$d" --include="*.py" | grep -v "# noqa" || true)
+            if [ -n "$FOUND" ]; then HITS="$HITS\n$FOUND"; fi
+          done
+
           if [ -n "$HITS" ]; then
-            echo "⚠️  print() found in engine/ (use logger instead):"
-            echo "$HITS"
+            echo "⚠️  print() found in core execution path (use logger instead):"
+            echo -e "$HITS"
             exit 1
           fi
-          echo "✅ No raw print() in engine/"
+          echo "✅ No raw print() in core execution path"
 
       - name: Verify worker configs exist
         run: |

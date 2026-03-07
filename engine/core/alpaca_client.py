@@ -6,10 +6,13 @@ Supports caching, retries, and config-based or env-based credentials.
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timedelta
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import requests
@@ -90,7 +93,7 @@ class AlpacaClient:
                     time.sleep(self.retry_delay)
                     continue
                 # Log the final failure and return None instead of raising
-                print(f"API request failed after {self.retry_attempts} attempts: {e}")
+                logger.error(f"API request failed after {self.retry_attempts} attempts: {e}")
                 return None
         return None
 
