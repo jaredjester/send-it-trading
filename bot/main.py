@@ -61,7 +61,7 @@ except Exception as _e:
 LOG_FILE = str(Path(os.getenv('LOG_DIR', str(BOT_DIR.parent / 'engine' / 'logs'))) / 'bot.log')
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()),
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
 )
@@ -159,8 +159,8 @@ def get_finviz_signals(base_symbols: list):
                 if hits:
                     logger.info('Signal bus: %d signals match watchlist (age=%.0fs)', len(hits), age)
                     return [(h['symbol'], 'call', h.get('score', 60), h.get('reason', '')) for h in hits]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to load Finviz signals: {e}")
     return [(s, 'call', 60, 'watchlist') for s in base_symbols]
 
 
@@ -176,7 +176,8 @@ def is_market_open() -> bool:
             timeout=5,
         )
         return r.json().get('is_open', False)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Market open check failed: {e}")
         return False
 
 
@@ -192,7 +193,8 @@ def get_capital() -> float:
         )
         data = r.json()
         return float(data.get('cash', data.get('portfolio_value', 100.0)))
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Capital fetch failed: {e}")
         return 100.0
 
 
@@ -390,8 +392,8 @@ def execute_signal(sig: Signal, capital: float, ca_sentiment: dict = None, news_
             trade_direction='call' if sig.kind == 'call' else 'put',
             poly_score=polymarket_score,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Polymarket tracking failed: {e}")
     # Create and save trade plan
     # Telegram alert
     try:
@@ -489,7 +491,8 @@ def run_cycle():
             try:
                 _plan_deadline = _dtx.fromisoformat(_plan.target_date.replace('Z','+00:00'))
                 _days_to_dl = max(0, (_plan_deadline - _dtx.now(timezone.utc)).days)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Deadline parsing failed: {e}")
                 _days_to_dl = 7
 
             # Check TARGET HIT
@@ -503,7 +506,8 @@ def run_cycle():
                     from datetime import datetime as _dtx2
                     _dh = max(1, (_dtx2.now() - _dtx2.fromisoformat(_plan.entry_ts.replace('Z','+00:00').replace('+00:00',''))).days)
                     rl.record_plan_outcome(_plan.plan_id, _plan.strategy, True, _plan.risk_reward, _dh, _plan.catalyst_window_days)
-                except Exception: pass
+                except Exception as e:
+                    logger.warning(f"RL record plan outcome failed: {e}")
                 try:
                     close_position(_plan.occ_symbol)
                 except Exception as _ce:
@@ -516,8 +520,8 @@ def run_cycle():
                             f"Entry: ${_plan.entry_price:.2f} → Exit: ${_p_bid:.2f}\n"
                             f"P&L: ${_pnl:.2f} | R/R: {_plan.risk_reward:.1f}:1"
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Telegram target hit alert failed: {e}")
                 continue
 
             # Check STOP HIT
@@ -531,7 +535,8 @@ def run_cycle():
                     from datetime import datetime as _dtx2
                     _dh = max(1, (_dtx2.now() - _dtx2.fromisoformat(_plan.entry_ts.replace('Z','+00:00').replace('+00:00',''))).days)
                     rl.record_plan_outcome(_plan.plan_id, _plan.strategy, False, -0.5, _dh, _plan.catalyst_window_days)
-                except Exception: pass
+                except Exception as e:
+                    logger.warning(f"RL record plan outcome failed: {e}")
                 try:
                     close_position(_plan.occ_symbol)
                 except Exception as _ce:
@@ -544,8 +549,8 @@ def run_cycle():
                             f"Entry: ${_plan.entry_price:.2f} → Exit: ${_p_bid:.2f}\n"
                             f"P&L: ${_pnl:.2f} (stop triggered)"
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Telegram stop hit alert failed: {e}")
                 continue
 
             # Log monitoring status
@@ -590,8 +595,8 @@ def run_cycle():
                               (_current_bid - _plan.entry_price) * 100 * _plan.contracts)
                 try:
                     if _tg: _tg._send(f"TARGET HIT: {_plan.symbol} | bid={_current_bid:.2f} >= target={_plan.target_price:.2f}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Telegram target hit alert failed: {e}")
                 _plans_freed_capital += _current_bid * 100
                 continue
             # Check stop hit
@@ -630,8 +635,10 @@ def run_cycle():
                             logger.info('[ORDER] Expiring unfilled plan %s', _sp.plan_id[:8])
                             close_plan(_sp.plan_id, 0.0, 'order_expired', _sp.contracts)
                             try: rl.close_trade(_sp.trade_id, 0.0, -_sp.entry_price * 100 * _sp.contracts)
-                            except Exception: pass
-                    except Exception: pass
+                            except Exception as e:
+                                logger.warning(f"RL close trade failed: {e}")
+                    except Exception as e:
+                        logger.warning(f"Expiring unfilled plan failed: {e}")
             except Exception as _oe:
                 logger.debug('[ORDER] parse created_at failed: %s', _oe)
     except Exception as _oe2:
@@ -643,8 +650,8 @@ def run_cycle():
         _pruned = rl.prune_stale_pending(max_age_days=7)
         if _pruned:
             logger.info('[RL] Pruned %d stale pending signals', _pruned)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"RL prune stale pending failed: {e}")
 
     # Dynamic watchlist: expire TTLs + sync Alpaca every cycle; screener every 10 min
     try:
@@ -667,8 +674,8 @@ def run_cycle():
         if _ni.exists():
             _news_scores = {s: d.get('combined_score', d.get('news', {}).get('score', 0.0))
                             for s, d in _j.loads(_ni.read_text()).get('symbols', {}).items()}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Loading news scores failed: {e}")
     try:
         import json as _j2
         from pathlib import Path as _P2
@@ -676,8 +683,8 @@ def run_cycle():
         if _ii.exists():
             _insider_scores = {s: d.get('score', 0.0)
                                for s, d in _j2.loads(_ii.read_text()).get('data', {}).items()}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Loading insider scores failed: {e}")
     try:
         _poly_macro_score = polymarket_scanner.get_macro_score()
         for _sym in watchlist.get_symbols():
@@ -686,8 +693,8 @@ def run_cycle():
             logger.info('[STEP] Poly macro=%.3f | top: %s',
                         _poly_macro_score,
                         str({s:round(v,3) for s,v in _poly_scores.items() if abs(v)>0.05})[:120])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Loading polymarket scores failed: {e}")
     logger.info('[STEP 1] Watchlist: %d symbols -> %s', len(raw_symbols), raw_symbols)
 
     optionable = filter_optionable(raw_symbols)
@@ -754,8 +761,9 @@ def run_cycle():
                     _oc_snap = get_option_snapshot(_oc_plan.occ_symbol)
                     _oc_greeks = _oc_snap.get(_oc_plan.occ_symbol, {}).get('greeks', {})
                     _oc_delta = abs(float(_oc_greeks.get('delta', 0.15)))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Getting option snapshot failed: {e}")
+                # Calculate opportunity cost
 
                 # Parse expiry DTE from OCC symbol (rough estimate)
                 _oc_dte_actual = max(1, _oc_dte + _oc_plan.catalyst_window_days)
@@ -796,11 +804,13 @@ def run_cycle():
                                     if _stale.get('symbol') == _oc_plan.occ_symbol:
                                         cancel_order(_stale['id'])
                                         logger.info('[OC] Cancelled pending order %s', _stale['id'][:8])
-                            except Exception: pass
+                            except Exception as e:
+                                logger.warning(f"Cancelling pending orders failed: {e}")
                             close_plan(_oc_plan.plan_id, 0.0, 'order_expired', _oc_plan.contracts)
                             try:
                                 rl.close_trade(_oc_plan.trade_id, 0.0, -_oc_plan.entry_price * 100 * _oc_plan.contracts)
-                            except Exception: pass
+                            except Exception as e:
+                                logger.warning(f"RL close trade failed: {e}")
                         else:
                             logger.error('[OC] Close failed: %s', _ce)
                         continue
@@ -814,7 +824,8 @@ def run_cycle():
                         from datetime import datetime as _dtx2
                         _dh = max(1, (_dtx2.now() - _dtx2.fromisoformat(_oc_plan.entry_ts.replace('Z','+00:00').replace('+00:00',''))).days)
                         rl.record_plan_outcome(_oc_plan.plan_id, _oc_plan.strategy, False, _oc_pnl / max(abs(_oc_plan.max_loss_dollars), 1), _dh, _oc_plan.catalyst_window_days)
-                    except Exception: pass
+                    except Exception as e:
+                        logger.warning(f"RL record plan outcome failed: {e}")
                     opts_bp += _oc_freed
                     logger.info('[OC] Closed %s | freed $%.2f | pnl=$%.2f', _oc_plan.symbol, _oc_freed, _oc_pnl)
 

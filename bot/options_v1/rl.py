@@ -6,6 +6,7 @@ import numpy as np
 from dataclasses import dataclass, asdict, field
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from engine.core.trading_db import db
 
 logger = logging.getLogger(__name__)
 
@@ -87,56 +88,33 @@ class RLTrainer:
         return len(stale)
 
     def _load_memory(self) -> list:
-        """Load trade memory records from JSONL for replay weighting."""
-        records = []
-        try:
-            if MEMORY_PATH.exists():
-                for line in MEMORY_PATH.read_text().splitlines():
-                    line = line.strip()
-                    if line:
-                        try:
-                            records.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
-        except Exception:
-            pass
-        return records
+        """Load trade memory records from DB for replay weighting."""
+        return db.get_trades()
 
     def _save_weights(self):
         with open(WEIGHTS_PATH, 'w') as f:
             json.dump(self.weights, f, indent=2)
 
     def record_trade(self, record: TradeRecord):
-        with open(MEMORY_PATH, 'a') as f:
-            f.write(json.dumps(asdict(record)) + '\n')
+        trade_dict = asdict(record)
+        db.record_trade(trade_dict)
         logger.info('RL recorded trade %s %s %s', record.trade_id, record.symbol, record.strategy)
 
     def close_trade(self, trade_id: str, exit_price: float, pnl: float):
         """Mark a trade as closed and trigger weight update."""
-        records = []
-        updated = False
-        with open(MEMORY_PATH) as f:
-            for line in f:
-                rec = json.loads(line)
-                if rec['trade_id'] == trade_id and rec['outcome'] == 'open':
-                    rec['exit_price'] = exit_price
-                    rec['pnl']        = pnl
-                    rec['outcome']    = 'win' if pnl > 0 else ('loss' if pnl < 0 else 'breakeven')
-                    updated = True
-                    # PnL-weighted replay: large P&L = more learning signal
-                    _all_pnls = [abs(r.get('pnl') or 0)
-                                 for r in self._load_memory() if r.get('pnl') is not None]
-                    _avg_abs  = (sum(_all_pnls) / len(_all_pnls)) if _all_pnls else 50.0
-                    _pnl_weight = max(0.5, min(3.0, abs(pnl) / max(_avg_abs, 1.0)))
-                    logger.info('[RL] PnL-weighted replay: |pnl|=%.2f avg=%.2f weight=%.2f',
-                                abs(pnl), _avg_abs, _pnl_weight)
-                    self._update_weights(rec, scale=_pnl_weight)
-                records.append(rec)
-        if updated:
-            # Atomic write — write to .tmp then rename to avoid partial-write corruption
-            tmp = MEMORY_PATH.with_suffix('.tmp')
-            with open(tmp, 'w') as f:
-                for rec in records:
+        outcome = 'win' if pnl > 0 else ('loss' if pnl < 0 else 'breakeven')
+        db.update_trade_pnl(trade_id, pnl, outcome)
+        # Load the trade for weight update
+        trades = db.get_trades()
+        trade = next((t for t in trades if t['id'] == trade_id), None)
+        if trade:
+            # PnL-weighted replay: large P&L = more learning signal
+            all_pnls = [abs(t.get('pnl') or 0) for t in trades if t.get('pnl') is not None]
+            avg_abs = (sum(all_pnls) / len(all_pnls)) if all_pnls else 50.0
+            pnl_weight = max(0.5, min(3.0, abs(pnl) / max(avg_abs, 1.0)))
+            logger.info('[RL] PnL-weighted replay: |pnl|=%.2f avg=%.2f weight=%.2f',
+                        abs(pnl), avg_abs, pnl_weight)
+            self._update_weights(trade, scale=pnl_weight)
                     f.write(json.dumps(rec) + '\n')
             tmp.replace(MEMORY_PATH)
             # Activate IC learning — update signal quality scores from this outcome
