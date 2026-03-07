@@ -454,18 +454,19 @@ def _load_intel():
 
 
 def _load_signals():
-    """Load merged signal intelligence: news + insider + RL IC."""
+    """Load merged signal intelligence: news + insider + RL IC + polymarket + CA sentiment."""
     news_data    = _read_json(NEWS_INTEL).get('symbols', {})
     insider_data = _read_json(INSIDER_INTEL).get('data', {})
     rl           = _read_json(RL_WEIGHTS)
     rl_ic        = rl.get('signal_ic', {})
     ic_obs       = {k: len(v) for k, v in rl.get('ic_obs', {}).items()}
+    ca_data      = _read_json(SENTIMENT)
 
     syms = {}
     for sym in sorted(set(list(news_data.keys()) + list(insider_data.keys()))):
         ni = news_data.get(sym, {})
         ii = insider_data.get(sym, {})
-        syms[sym] = {
+        entry = {
             'news': {
                 'score':      ni.get('news', {}).get('score', 0.0),
                 'label':      ni.get('news', {}).get('label', 'neutral'),
@@ -482,7 +483,25 @@ def _load_signals():
                 'transactions': ii.get('transactions', []),
             },
         }
-    return {'symbols': syms, 'rl_ic': rl_ic, 'ic_obs_counts': ic_obs}
+        # CA sentiment (corporate actions / StockTwits)
+        if ca_data:
+            ca_entry = ca_data.get(sym, {})
+            if isinstance(ca_entry, dict):
+                entry['ca'] = {
+                    'score':  ca_entry.get('score', 0.0),
+                    'label':  ca_entry.get('label', 'neutral'),
+                    'events': ca_entry.get('events', []),
+                }
+        syms[sym] = entry
+
+    out = {'symbols': syms, 'rl_ic': rl_ic, 'ic_obs_counts': ic_obs}
+
+    # Polymarket — always include so SSE stream and REST endpoint both have it
+    poly = _load_polymarket()
+    if poly:
+        out['polymarket'] = poly
+
+    return out
 
 
 def _load_polymarket():
@@ -672,22 +691,7 @@ def api_intel():
 
 @app.route('/api/signals')
 def api_signals():
-    out = _load_signals()
-    poly = _load_polymarket()
-    if poly:
-        out['polymarket'] = poly
-    # CA sentiment
-    ca = _read_json(SENTIMENT)
-    if ca:
-        for sym in out.get('symbols', {}):
-            ca_entry = ca.get(sym, {})
-            if isinstance(ca_entry, dict):
-                out['symbols'][sym]['ca'] = {
-                    'score':  ca_entry.get('score', 0.0),
-                    'label':  ca_entry.get('label', 'neutral'),
-                    'events': ca_entry.get('events', []),
-                }
-    return jsonify(out)
+    return jsonify(_load_signals())
 
 
 @app.route('/api/plans')
