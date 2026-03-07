@@ -1,5 +1,6 @@
 """Trade planner — creates and tracks structured trade plans with targets and stops."""
 import json
+import os
 import logging
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
