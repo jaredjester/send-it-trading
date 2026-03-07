@@ -1,10 +1,9 @@
-"""Core: config, Alpaca, sizing (Kelly)."""
-from .config import get_project_root, load_config, resolve_path
-from .alpaca_client import AlpacaClient
-from .sizing import EdgeEstimate, KellyConfig, kelly_fraction, size_position, synthesize_edge, unified_position_size
+"""
+engine/core — infrastructure package.
 
-__all__ = [
-    "load_config", "get_project_root", "resolve_path",
-    "AlpacaClient", "EdgeEstimate", "KellyConfig",
-    "kelly_fraction", "size_position", "synthesize_edge", "unified_position_size",
-]
+Modules are imported directly, not re-exported here.
+Use: from core.dynamic_config import cfg
+     from core.alpaca_client import AlpacaClient
+     from core.options_trader import OptionsTrader
+     from core.trading_db import db
+"""
