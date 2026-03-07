@@ -46,36 +46,33 @@ from typing import Optional
 logger = logging.getLogger("options_trader")
 
 from core.dynamic_config import cfg as _cfg
+from core.trading_db import db
 
 PLANS_FILE = Path(__file__).parent.parent / "state" / "options_plans.jsonl"
 
 def _write_plan(plan: dict):
-    """Append a plan entry to options_plans.jsonl."""
+    """Record a plan entry in database. Maps options plan schema → DB positions schema."""
     try:
-        PLANS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(PLANS_FILE, "a") as f:
-            f.write(json.dumps(plan) + "\n")
+        db.record_position({
+            "id":            plan["id"],
+            "symbol":        plan["symbol"],
+            "qty":           float(plan.get("contracts", 1)),
+            "market_value":  plan.get("entry_notional"),
+            "unrealized_pl": 0.0,
+            "entry_price":   plan.get("entry_price"),
+            "stop_price":    plan.get("stop_price"),
+            "target_price":  plan.get("target_price"),
+            "timestamp":     plan.get("entry_ts"),
+            # Store full plan as JSON for dashboard recovery
+            "_raw": plan,
+        })
     except Exception as e:
         logger.warning(f"Plan write failed: {e}")
 
 def _update_plan(plan_id: str, updates: dict):
     """Update an existing plan entry by plan_id."""
     try:
-        if not PLANS_FILE.exists():
-            return
-        lines = PLANS_FILE.read_text().strip().split("\n")
-        new_lines = []
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                p = json.loads(line)
-                if p.get("plan_id") == plan_id:
-                    p.update(updates)
-                new_lines.append(json.dumps(p))
-            except Exception:
-                new_lines.append(line)
-        PLANS_FILE.write_text("\n".join(new_lines) + "\n")
+        db.update_position(plan_id, updates)
     except Exception as e:
         logger.warning(f"Plan update failed: {e}")
 
@@ -190,6 +187,7 @@ class OptionsTrader:
             stop_dollar   = round(stop_price * 100, 2)
             target_dollar = round(target_price * 100, 2)
             plan = {
+                "id":              plan_id,
                 "plan_id":         plan_id,
                 "symbol":          symbol,
                 "occ_symbol":      contract_symbol,
@@ -286,24 +284,19 @@ class OptionsTrader:
                     closed.append(symbol)
                     # Update plan if one exists
                     try:
-                        if PLANS_FILE.exists():
-                            lines = PLANS_FILE.read_text().strip().split("\n")
-                            for line in lines:
-                                if line.strip():
-                                    p = json.loads(line)
-                                    if p.get("occ_symbol") == symbol and p.get("status") == "open":
-                                        exit_status = (
-                                            "target_hit" if "profit" in reason
-                                            else "stop_hit" if "stop" in reason
-                                            else "expired" if "expiry" in reason
-                                            else "closed"
-                                        )
-                                        _update_plan(p["plan_id"], {
-                                            "status":   exit_status,
-                                            "exit_ts":  datetime.now(timezone.utc).isoformat(),
-                                            "exit_reason": reason,
-                                        })
-                                        break
+                        pos = db.get_position_by_symbol(symbol)
+                        if pos:
+                            exit_status = (
+                                "target_hit" if "profit" in reason
+                                else "stop_hit" if "stop" in reason
+                                else "expired" if "expiry" in reason
+                                else "closed"
+                            )
+                            _update_plan(pos["id"], {
+                                "status":   exit_status,
+                                "exit_ts":  datetime.now(timezone.utc).isoformat(),
+                                "exit_reason": reason,
+                            })
                     except Exception as _upe:
                         logger.debug(f"Plan update on close failed: {_upe}")
                 else:

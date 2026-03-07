@@ -34,8 +34,8 @@ def _tg(msg: str):
             json={"chat_id": _TG_CHAT, "text": msg, "parse_mode": "HTML"},
             timeout=6,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Telegram message failed: {e}")
 
 
 def _cycle_report(cycle_num: int, orchestrator, secs_until_next: float):
@@ -102,7 +102,7 @@ def _cycle_report(cycle_num: int, orchestrator, secs_until_next: float):
     _tg(msg)
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(Path(os.getenv('LOG_DIR', str(REPO_DIR / 'engine' / 'logs'))) / 'trading.log'),

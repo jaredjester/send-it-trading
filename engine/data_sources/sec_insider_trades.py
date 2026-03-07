@@ -14,10 +14,12 @@ from datetime import datetime, timedelta
 import time
 import os
 from collections import defaultdict
+import logging
 
 class SECInsiderTracker:
     def __init__(self):
         """Initialize SEC EDGAR scraper."""
+        self.logger = logging.getLogger(__name__)
         self.base_url = 'https://data.sec.gov'
         self.headers = {
             'User-Agent': 'HedgeFund Bot/1.0 (jonny2298@live.com)',
@@ -46,7 +48,7 @@ class SECInsiderTracker:
             
             return None
         except Exception as e:
-            print(f"⚠️  Error getting CIK for {ticker}: {e}")
+            self.logger.warning(f"⚠️  Error getting CIK for {ticker}: {e}")
             return None
     
     def get_recent_form4_filings(self, cik, count=10):
@@ -86,10 +88,10 @@ class SECInsiderTracker:
                 
                 return form4s
             else:
-                print(f"⚠️  SEC API error for CIK {cik}: {resp.status_code}")
+                self.logger.warning(f"⚠️  SEC API error for CIK {cik}: {resp.status_code}")
                 return []
         except Exception as e:
-            print(f"⚠️  Error fetching Form 4s: {e}")
+            self.logger.warning(f"⚠️  Error fetching Form 4s: {e}")
             return []
     
     def analyze_insider_sentiment(self, ticker, days=30):
@@ -160,7 +162,7 @@ class SECInsiderTracker:
         results = {}
         
         for ticker in tickers:
-            print(f"  Checking insider trades for {ticker}...")
+            self.logger.info(f"  Checking insider trades for {ticker}...")
             
             data = self.analyze_insider_sentiment(ticker, days=30)
             
@@ -174,7 +176,7 @@ class SECInsiderTracker:
     
     def run_daily_scan(self, watchlist, output_path='sec_insider_trades.json'):
         """Run full daily scan of insider activity."""
-        print(f"📋 SEC Insider Trading Scan - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        self.logger.info(f"📋 SEC Insider Trading Scan - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         
         results = self.scan_watchlist(watchlist)
         

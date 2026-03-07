@@ -1,6 +1,10 @@
 # Secrets
 .env
 
+# Logs
+*.log
+*.jsonl
+
 # Runtime data — generated at runtime, never commit these
 data/*
 !data/.gitkeep

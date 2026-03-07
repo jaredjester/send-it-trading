@@ -22,9 +22,13 @@ HEADERS = {
     'Content-Type': 'application/json',
 }
 
+# Persistent session for connection reuse
+_session = requests.Session()
+_session.headers.update(HEADERS)
+
 
 def _get(url: str, params: dict = None) -> dict:
-    r = requests.get(url, headers=HEADERS, params=params, timeout=10)
+    r = _session.get(url, params=params, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -41,12 +45,16 @@ def get_positions() -> list:
 
 def get_spot(symbol: str) -> float:
     """Latest trade price for a stock symbol."""
+    if not symbol or not symbol.isalpha() or len(symbol) > 5:
+        raise ValueError(f"Invalid symbol: {symbol}")
     data = _get(f'{ALPACA_DATA}/v2/stocks/{symbol}/trades/latest')
     return float(data['trade']['p'])
 
 
 def get_option_chain(symbol: str, expiry: Optional[str] = None) -> List[Dict]:
     """Fetch option contracts for a symbol from Alpaca trading API."""
+    if not symbol or not symbol.isalpha() or len(symbol) > 5:
+        raise ValueError(f"Invalid symbol: {symbol}")
     today    = datetime.utcnow().date()
     min_exp  = (today + timedelta(days=1)).isoformat()   # skip same-day expiries
     max_exp  = (today + timedelta(days=60)).isoformat()
