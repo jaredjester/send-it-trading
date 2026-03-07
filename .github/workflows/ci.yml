@@ -60,9 +60,10 @@ jobs:
             FAILED=1
           fi
 
-          # Hardcoded absolute paths to dev machines
+          # Hardcoded absolute paths to dev machines (ignore comments)
           if grep -rn "/home/jonathangan\|/Users/jon\|~/shared" \
-              engine/ bot/ dashboard/ --include="*.py" 2>/dev/null; then
+              engine/ bot/ dashboard/ --include="*.py" 2>/dev/null \
+              | grep -v "^\s*#\|#.*~/\|#.*/home/\|#.*/Users/"; then
             echo "❌ Hardcoded absolute paths found"
             FAILED=1
           fi
