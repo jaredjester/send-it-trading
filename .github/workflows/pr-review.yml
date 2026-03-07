@@ -1,0 +1,131 @@
+name: PR Review
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  diff-summary:
+    name: 📊 PR Diff Summary
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze PR diff
+        id: diff
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+
+          FILES=$(git diff --name-only $BASE $HEAD | wc -l)
+          PY_FILES=$(git diff --name-only $BASE $HEAD | grep "\.py$" | wc -l)
+          INSERTIONS=$(git diff --stat $BASE $HEAD | tail -1 | grep -oP '\d+(?= insertion)' || echo 0)
+          DELETIONS=$(git diff --stat $BASE $HEAD | tail -1 | grep -oP '\d+(?= deletion)' || echo 0)
+
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          echo "py_files=$PY_FILES" >> $GITHUB_OUTPUT
+          echo "insertions=$INSERTIONS" >> $GITHUB_OUTPUT
+          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
+
+          # List changed files
+          CHANGED=$(git diff --name-only $BASE $HEAD | head -30 | sed 's/^/  - /')
+          echo "changed<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Check for new HAS_* flags
+        id: has_flags
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          NEW_FLAGS=$(git diff $BASE $HEAD -- "*.py" | grep "^+" | grep -v "^+++" \
+            | grep -oP "HAS_\w+" | sort -u || true)
+          if [ -n "$NEW_FLAGS" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "flags=$NEW_FLAGS" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for new hardcoded numbers (magic values)
+        id: magic_numbers
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          # Look for new numeric literals not using cfg() — rough heuristic
+          MAGIC=$(git diff $BASE ${{ github.event.pull_request.head.sha }} -- "engine/*.py" \
+            | grep "^+" | grep -v "^+++" \
+            | grep -oP "= (0\.\d{2,}|\d{2,}\.?\d*)" \
+            | grep -v "0\.0\|1\.0\|100\|0\.5\|60\|30" | head -5 || true)
+          echo "hits=$MAGIC" >> $GITHUB_OUTPUT
+
+      - name: Post review comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = '${{ steps.diff.outputs.files }}';
+            const pyFiles = '${{ steps.diff.outputs.py_files }}';
+            const insertions = '${{ steps.diff.outputs.insertions }}';
+            const deletions = '${{ steps.diff.outputs.deletions }}';
+            const changed = `${{ steps.diff.outputs.changed }}`;
+            const hasFlags = '${{ steps.has_flags.outputs.found }}' === 'true';
+            const flagNames = '${{ steps.has_flags.outputs.flags }}';
+
+            let warnings = [];
+            if (hasFlags) {
+              warnings.push(`⚠️ **New HAS_* flags detected:** \`${flagNames}\` — use direct imports instead`);
+            }
+
+            const body = [
+              '## 🤖 Automated PR Review',
+              '',
+              '| Metric | Value |',
+              '|--------|-------|',
+              `| Files changed | ${files} (${pyFiles} Python) |`,
+              `| Lines added | +${insertions} |`,
+              `| Lines removed | -${deletions} |`,
+              '',
+              '### Changed Files',
+              '```',
+              changed,
+              '```',
+              '',
+              warnings.length ? '### ⚠️ Warnings\n' + warnings.join('\n') : '### ✅ No issues detected',
+              '',
+              '_CI checks running in parallel — see Actions tab for compile/import/quality results._',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+  safety-check:
+    name: 🔒 Safety Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check no secrets in diff
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+
+          # Common secret patterns
+          SECRETS=$(git diff $BASE $HEAD | grep "^+" | grep -v "^+++" | \
+            grep -iE "api_key\s*=\s*['\"][A-Z0-9]{16,}|secret\s*=\s*['\"][A-Za-z0-9+/]{20,}|token\s*=\s*['\"][A-Za-z0-9._-]{20,}" \
+            | grep -v "os\.getenv\|os\.environ\|getenv\|environ\|your_\|example\|placeholder\|<\|>" || true)
+
+          if [ -n "$SECRETS" ]; then
+            echo "🚨 Possible secrets detected in diff:"
+            echo "$SECRETS"
+            exit 1
+          fi
+          echo "✅ No secrets detected in diff"

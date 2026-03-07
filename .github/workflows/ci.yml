@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compile-check:
+    name: 🐍 Compile All Python Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile sweep
+        run: |
+          set +e
+          ERRORS=0
+          COUNT=0
+          while IFS= read -r -d '' f; do
+            COUNT=$((COUNT + 1))
+            if ! python3 -m py_compile "$f" 2>/tmp/err; then
+              echo "❌ $f"
+              cat /tmp/err
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find . -name "*.py" -not -path "./.git/*" -not -path "./*__pycache__*" -print0)
+          echo ""
+          echo "Compiled $COUNT files — $ERRORS errors"
+          if [ $ERRORS -gt 0 ]; then exit 1; fi
+          echo "✅ All files compile clean"
+
+  forbidden-patterns:
+    name: 🚫 Forbidden Patterns
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for forbidden patterns
+        run: |
+          FAILED=0
+
+          echo "### Checking for forbidden code patterns..."
+
+          # HAS_* feature flags (anti-pattern — use direct imports)
+          if grep -rn "HAS_ALPHA\|HAS_RL\|HAS_OPTIONS\|HAS_MONTE\|HAS_ONLINE\|HAS_ATTR\|HAS_STOCK" \
+              engine/ bot/ --include="*.py" 2>/dev/null | grep -v "^Binary"; then
+            echo "❌ HAS_* feature flags found — use direct imports"
+            FAILED=1
+          fi
+
+          # CONFIG_OVERRIDE env injection (replaced by per-worker live_config.json)
+          if grep -rn "CONFIG_OVERRIDE" engine/ bot/ --include="*.py" 2>/dev/null; then
+            echo "❌ CONFIG_OVERRIDE found — worker configs live in evolution/workers/*/eval/"
+            FAILED=1
+          fi
+
+          # Hardcoded absolute paths to dev machines
+          if grep -rn "/home/jonathangan\|/Users/jon\|~/shared" \
+              engine/ bot/ dashboard/ --include="*.py" 2>/dev/null; then
+            echo "❌ Hardcoded absolute paths found"
+            FAILED=1
+          fi
+
+          # master_config.json references (retired)
+          if grep -rn "master_config\.json" engine/ bot/ --include="*.py" 2>/dev/null \
+              | grep -v "DEPRECATED\|deprecated\|# \|docstring"; then
+            echo "❌ master_config.json references found — use dynamic_config.cfg()"
+            FAILED=1
+          fi
+
+          # Hardcoded API keys (rough check)
+          if grep -rn "AKYI7MN9\|GAXKFKzn\|ghp_ocby" engine/ bot/ --include="*.py" 2>/dev/null; then
+            echo "❌ Hardcoded API keys found"
+            FAILED=1
+          fi
+
+          if [ $FAILED -eq 0 ]; then
+            echo "✅ No forbidden patterns found"
+          else
+            exit 1
+          fi
+
+  import-check:
+    name: 📦 Critical Import Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -q requests python-dotenv numpy pandas
+
+      - name: Verify key modules import cleanly
+        run: |
+          python3 - << 'PY'
+          import sys, os
+          sys.path.insert(0, 'engine')
+          sys.path.insert(0, '.')
+          os.environ['ALPACA_MODE'] = 'paper'
+
+          results = {}
+
+          modules = [
+              ('core.dynamic_config', 'cfg'),
+              ('core.defaults', 'DEFAULTS'),
+              ('core.trading_db', 'db'),
+              ('alpha_engine', 'AlphaEngine'),
+              ('rl.threshold_learner', 'ThresholdLearner'),
+              ('rl.online_learner', 'OnlineLearner'),
+              ('rl.episode_bridge', 'EpisodeBridge'),
+          ]
+
+          failed = 0
+          for module, attr in modules:
+              try:
+                  m = __import__(module, fromlist=[attr])
+                  getattr(m, attr)
+                  print(f"  ✅ {module}.{attr}")
+              except Exception as e:
+                  print(f"  ❌ {module}.{attr}: {e}")
+                  failed += 1
+
+          # Cross-silo: simulate bot importing from engine
+          sys.path.insert(0, 'bot')
+          try:
+              from engine.core.trading_db import db
+              print(f"  ✅ engine.core.trading_db (from bot/ context)")
+          except Exception as e:
+              print(f"  ❌ engine.core.trading_db (from bot/ context): {e}")
+              failed += 1
+
+          if failed:
+              sys.exit(1)
+          print(f"\n✅ All {len(modules)+1} critical imports OK")
+          PY
+
+  code-quality:
+    name: 🔍 Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for bare silent excepts
+        run: |
+          # Find "except: pass" or "except Exception: pass" (silent swallowing)
+          HITS=$(grep -rn "except.*:\s*$" engine/ bot/ --include="*.py" -A1 \
+            | grep -B1 "^\s*pass$" | grep "except" | grep -v "^--$" || true)
+          if [ -n "$HITS" ]; then
+            echo "⚠️  Silent exception swallowing found (except: pass):"
+            echo "$HITS"
+            echo "Replace with: except Exception as e: logger.debug(...)"
+            exit 1
+          fi
+          echo "✅ No silent exception swallowing"
+
+      - name: Check print() usage in engine (should use logger)
+        run: |
+          # Allow print in __main__ blocks and test files only
+          HITS=$(grep -rn "^\s*print(" engine/ --include="*.py" \
+            | grep -v "# noqa\|if __name__" || true)
+          if [ -n "$HITS" ]; then
+            echo "⚠️  print() found in engine/ (use logger instead):"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "✅ No raw print() in engine/"
+
+      - name: Verify worker configs exist
+        run: |
+          FAILED=0
+          for worker in aggressive balanced conservative momentum; do
+            cfg="evolution/workers/$worker/eval/live_config.json"
+            if [ ! -f "$cfg" ]; then
+              echo "❌ Missing: $cfg"
+              FAILED=1
+            else
+              # Validate JSON
+              if ! python3 -c "import json; json.load(open('$cfg'))" 2>/dev/null; then
+                echo "❌ Invalid JSON: $cfg"
+                FAILED=1
+              else
+                echo "✅ $cfg"
+              fi
+            fi
+          done
+          [ $FAILED -eq 0 ] || exit 1

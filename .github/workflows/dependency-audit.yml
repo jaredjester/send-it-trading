@@ -1,0 +1,62 @@
+name: Dependency Audit
+
+on:
+  schedule:
+    - cron: "0 10 * * 1"   # Monday 10 AM UTC
+  push:
+    paths:
+      - "requirements*.txt"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: 🔒 Security & Compatibility Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install & audit main deps
+        run: |
+          pip install -q pip-audit pip
+          echo "## Main requirements"
+          pip install -q -r requirements.txt 2>&1 | tail -5
+          echo "Running security audit..."
+          pip-audit -r requirements.txt --format=columns 2>&1 || true
+
+      - name: Install & audit worker deps
+        run: |
+          echo "## Worker requirements"
+          pip install -q -r requirements-worker.txt 2>&1 | tail -5
+          pip-audit -r requirements-worker.txt --format=columns 2>&1 || true
+
+      - name: Check for pinned versions
+        run: |
+          echo "### Checking for unpinned dependencies..."
+          UNPINNED=$(grep -E "^[a-zA-Z]" requirements.txt | grep -v "==" | grep -v "^#" | grep -v "^-" || true)
+          if [ -n "$UNPINNED" ]; then
+            echo "⚠️  Unpinned dependencies (consider pinning for reproducibility):"
+            echo "$UNPINNED"
+          else
+            echo "✅ All dependencies pinned"
+          fi
+
+      - name: Verify Python 3.11 compatibility
+        run: |
+          python3 --version
+          # Run the compile sweep as a compatibility check
+          ERRORS=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -m py_compile "$f" 2>/dev/null; then
+              echo "❌ Incompatible: $f"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find engine/ bot/ -name "*.py" -not -path "*__pycache__*" -print0)
+          if [ $ERRORS -eq 0 ]; then
+            echo "✅ All files compatible with Python 3.11"
+          else
+            exit 1
+          fi

@@ -1,0 +1,168 @@
+name: Daily Performance Report
+
+on:
+  schedule:
+    - cron: "0 14 * * 1-5"   # 9 AM ET weekdays (after market open)
+    - cron: "0 21 * * 1-5"   # 4 PM ET weekdays (after market close)
+  workflow_dispatch:           # Allow manual trigger
+
+jobs:
+  report:
+    name: 📈 Trading Performance Report
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install -q requests python-dotenv
+
+      - name: Generate performance report
+        run: |
+          python3 - << 'PY'
+          import json, os, sys
+          from pathlib import Path
+          from datetime import datetime, timezone, timedelta
+
+          REPO = Path('.')
+
+          print("# 📈 Send-It Trading — Performance Report")
+          print(f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+          print()
+
+          # ── Codebase health ────────────────────────────────────────────────
+          py_files = list(REPO.rglob('*.py'))
+          py_files = [f for f in py_files if '.git' not in str(f) and '__pycache__' not in str(f)]
+          print(f"## 🏗️ Codebase")
+          print(f"- Python files: {len(py_files)}")
+
+          # Worker configs
+          workers = ['aggressive', 'balanced', 'conservative', 'momentum']
+          print(f"- Worker personalities: {len(workers)}")
+          for w in workers:
+              cfg_path = REPO / f'evolution/workers/{w}/eval/live_config.json'
+              if cfg_path.exists():
+                  cfg = json.loads(cfg_path.read_text())
+                  print(f"  - **{w}**: threshold={cfg.get('min_score_threshold', 'N/A')} "
+                        f"max_premium=${cfg.get('options.max_premium', 'N/A')}")
+          print()
+
+          # ── Trade memory (if exists in repo) ──────────────────────────────
+          trade_mem = REPO / 'engine/state/trade_memory.jsonl'
+          if trade_mem.exists():
+              trades = [json.loads(l) for l in trade_mem.read_text().splitlines() if l.strip()]
+              if trades:
+                  closed = [t for t in trades if t.get('status') not in ('open', None)]
+                  wins = [t for t in closed if (t.get('pnl') or t.get('actual_pnl') or 0) > 0]
+                  total_pnl = sum(t.get('pnl') or t.get('actual_pnl') or 0 for t in closed)
+                  print(f"## 📊 Trade History (from trade_memory.jsonl)")
+                  print(f"- Total trades: {len(trades)}")
+                  print(f"- Closed: {len(closed)}")
+                  print(f"- Win rate: {len(wins)/max(len(closed),1)*100:.1f}%")
+                  print(f"- Total P&L: ${total_pnl:.2f}")
+                  print()
+
+                  # Recent trades
+                  recent = sorted(trades, key=lambda t: t.get('entry_ts',''), reverse=True)[:5]
+                  print(f"### Recent Trades")
+                  for t in recent:
+                      sym = t.get('symbol','?')
+                      pnl = t.get('pnl') or t.get('actual_pnl') or 0
+                      status = t.get('status','?')
+                      sig = t.get('signal_type') or t.get('sig_type','?')
+                      icon = '✅' if pnl > 0 else ('🔴' if pnl < 0 else '⬜')
+                      print(f"  {icon} {sym} | {sig} | pnl=${pnl:.2f} | {status}")
+              else:
+                  print("## 📊 Trade History")
+                  print("- No trades recorded yet")
+          else:
+              print("## 📊 Trade History")
+              print("- trade_memory.jsonl not in repo (gitignored — lives on Pi)")
+          print()
+
+          # ── Options plans ─────────────────────────────────────────────────
+          opts = REPO / 'engine/state/options_plans.jsonl'
+          if opts.exists():
+              plans = [json.loads(l) for l in opts.read_text().splitlines() if l.strip()]
+              open_plans = [p for p in plans if p.get('status') == 'open']
+              print(f"## 🎯 Options Positions")
+              print(f"- Open: {len(open_plans)}")
+              for p in open_plans:
+                  entry = p.get('entry_price', 0)
+                  target = p.get('target_price', 0)
+                  stop = p.get('stop_price', 0)
+                  print(f"  - {p.get('symbol')} {p.get('direction','').upper()} "
+                        f"| entry=${entry:.2f} target=${target:.2f} stop=${stop:.2f} "
+                        f"| exp {p.get('target_date','?')[:10]}")
+          print()
+
+          # ── Config snapshot ───────────────────────────────────────────────
+          live_cfg = REPO / 'engine/evaluation/live_config.json'
+          if live_cfg.exists():
+              cfg = json.loads(live_cfg.read_text())
+              print(f"## ⚙️ Live Config Snapshot")
+              key_params = ['min_score_threshold', 'max_position_pct', 'options.max_premium',
+                            'options.stop_loss_pct', 'rl_threshold_regime']
+              for k in key_params:
+                  if k in cfg:
+                      print(f"  - {k}: {cfg[k]}")
+          print()
+
+          # ── Git activity ──────────────────────────────────────────────────
+          print("## 📝 Recent Activity")
+          import subprocess
+          log = subprocess.run(['git','log','--oneline','-7'], capture_output=True, text=True)
+          for line in log.stdout.strip().splitlines():
+              print(f"  - {line}")
+          PY
+
+      - name: Write to GitHub Step Summary
+        run: |
+          python3 - << 'PY' >> $GITHUB_STEP_SUMMARY
+          import json, subprocess
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          print("# 📈 Send-It Trading — Daily Report")
+          print(f"> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+          print()
+
+          REPO = Path('.')
+
+          # Worker configs table
+          print("## ⚙️ Worker Personalities")
+          print("| Worker | Min Score | Max Premium | Stop Loss |")
+          print("|--------|-----------|-------------|-----------|")
+          for w in ['aggressive','balanced','conservative','momentum']:
+              p = REPO / f'evolution/workers/{w}/eval/live_config.json'
+              if p.exists():
+                  c = json.loads(p.read_text())
+                  print(f"| {w} | {c.get('min_score_threshold','?')} | "
+                        f"${c.get('options.max_premium','?')} | "
+                        f"{int(float(c.get('options.stop_loss_pct',0.5))*100)}% |")
+          print()
+
+          # Live config
+          lc = REPO / 'engine/evaluation/live_config.json'
+          if lc.exists():
+              cfg = json.loads(lc.read_text())
+              print("## 🎛️ Engine Config")
+              print(f"- Score threshold: `{cfg.get('min_score_threshold')}`")
+              print(f"- Max position: `{cfg.get('max_position_pct')}`")
+              print(f"- RL regime: `{cfg.get('rl_threshold_regime','unknown')}`")
+              print(f"- Options max premium: `${cfg.get('options.max_premium')}`")
+          print()
+
+          # Recent commits
+          log = subprocess.run(['git','log','--oneline','-5'], capture_output=True, text=True)
+          print("## 📝 Recent Commits")
+          for line in log.stdout.strip().splitlines():
+              sha, *msg = line.split(' ', 1)
+              print(f"- [`{sha}`](../../commit/{sha}) {' '.join(msg)}")
+          PY
