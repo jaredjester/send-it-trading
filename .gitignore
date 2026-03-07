@@ -40,3 +40,6 @@ evolution/champion.json
 !evolution/results/.gitkeep
 # Track worker eval configs (these are version-controlled defaults)
 !evolution/workers/*/eval/live_config.json
+
+# Track performance history — Pi pushes this daily
+!data/perf_history.jsonl

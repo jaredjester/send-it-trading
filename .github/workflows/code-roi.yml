@@ -1,0 +1,171 @@
+name: Code ROI Report
+
+on:
+  push:
+    paths:
+      - "data/perf_history.jsonl"   # Triggered whenever Pi pushes a new snapshot
+  workflow_dispatch:                 # Manual trigger
+
+jobs:
+  roi-report:
+    name: 📊 Code → Profit ROI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history for git log correlation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate Code ROI Report
+        id: roi
+        run: |
+          python3 - << 'PY'
+          import json, subprocess, sys
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          REPO = Path(".")
+          HISTORY_FILE = REPO / "data/perf_history.jsonl"
+
+          if not HISTORY_FILE.exists():
+              print("No perf_history.jsonl yet — snapshot runs daily after market close")
+              sys.exit(0)
+
+          records = [json.loads(l) for l in HISTORY_FILE.read_text().splitlines() if l.strip()]
+
+          if len(records) < 2:
+              print(f"Only {len(records)} snapshot(s) — need 2+ to compute ROI trend")
+              sys.exit(0)
+
+          print(f"Loaded {len(records)} snapshots")
+
+          # ── Compute per-snapshot code ROI ─────────────────────────────────
+          roi_series = []
+          for i, snap in enumerate(records):
+              roi_series.append({
+                  "date": snap["timestamp"][:10],
+                  "sha": snap["git_sha"],
+                  "commit_count": snap.get("commit_count", 0),
+                  "pnl_7d": snap["metrics_7d"]["total_pnl"],
+                  "win_rate": snap["metrics_7d"]["win_rate"],
+                  "n_trades": snap["metrics_7d"]["n_trades"],
+                  "all_time_pnl": snap["all_time"]["all_time_pnl"],
+                  "lines_changed": snap["diff_since_last"]["lines_added"] + snap["diff_since_last"]["lines_deleted"],
+                  "commits_since": snap["diff_since_last"]["commits_since"],
+                  "pnl_delta": snap.get("pnl_delta_7d", 0),
+                  "code_roi": snap.get("code_roi_per_100_lines", 0),
+                  "threshold": snap.get("config", {}).get("min_score_threshold"),
+                  "regime": snap.get("config", {}).get("rl_regime"),
+              })
+
+          latest = roi_series[-1]
+          first = roi_series[0]
+
+          # ── Trajectory metrics ────────────────────────────────────────────
+          total_code_changes = sum(r["lines_changed"] for r in roi_series)
+          total_pnl_growth = latest["all_time_pnl"] - first["all_time_pnl"]
+          cumulative_roi = (total_pnl_growth / max(total_code_changes, 1)) * 100
+
+          # Trend: are recent snapshots more profitable than older ones?
+          half = max(len(roi_series) // 2, 1)
+          early_avg_pnl = sum(r["pnl_7d"] for r in roi_series[:half]) / half
+          recent_avg_pnl = sum(r["pnl_7d"] for r in roi_series[-half:]) / half
+          improving = recent_avg_pnl > early_avg_pnl
+
+          # Best and worst code-change batches
+          roi_sorted = sorted(roi_series[1:], key=lambda r: r["code_roi"], reverse=True)
+          best_batch = roi_sorted[0] if roi_sorted else None
+          worst_batch = roi_sorted[-1] if roi_sorted else None
+
+          # ── Print report ──────────────────────────────────────────────────
+          print(f"\n{'='*60}")
+          print(f"CODE ROI REPORT — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+          print(f"{'='*60}")
+          print(f"\nSnapshots: {len(records)} | Span: {first['date']} → {latest['date']}")
+          print(f"\n📊 PROFITABILITY TRAJECTORY")
+          print(f"  All-time P&L growth: ${total_pnl_growth:+.2f}")
+          print(f"  Total code changed:  {total_code_changes:,} lines")
+          print(f"  Cumulative ROI:      ${cumulative_roi:+.4f} per 100 lines changed")
+          print(f"  Trend: {'📈 IMPROVING' if improving else '📉 DECLINING'}")
+          print(f"  Early avg 7d P&L:   ${early_avg_pnl:+.2f}")
+          print(f"  Recent avg 7d P&L:  ${recent_avg_pnl:+.2f}")
+
+          if best_batch:
+              print(f"\n🏆 BEST code batch: {best_batch['sha']} ({best_batch['date']})")
+              print(f"   P&L delta: ${best_batch['pnl_delta']:+.2f} | {best_batch['lines_changed']} lines | ROI: ${best_batch['code_roi']:+.4f}/100loc")
+
+          if worst_batch:
+              print(f"\n💀 WORST code batch: {worst_batch['sha']} ({worst_batch['date']})")
+              print(f"   P&L delta: ${worst_batch['pnl_delta']:+.2f} | {worst_batch['lines_changed']} lines | ROI: ${worst_batch['code_roi']:+.4f}/100loc")
+
+          print(f"\n📋 FULL HISTORY")
+          print(f"  {'Date':<12} {'SHA':<10} {'7d P&L':>8} {'WR':>6} {'Trades':>7} {'Lines Δ':>8} {'ROI/100loc':>12} {'Regime':<10}")
+          print(f"  {'-'*12} {'-'*10} {'-'*8} {'-'*6} {'-'*7} {'-'*8} {'-'*12} {'-'*10}")
+          for r in roi_series:
+              trend = "▲" if r["pnl_delta"] > 0 else ("▼" if r["pnl_delta"] < 0 else "─")
+              print(f"  {r['date']:<12} {r['sha']:<10} ${r['pnl_7d']:>+7.2f} {r['win_rate']:>5.0%} {r['n_trades']:>7} {r['lines_changed']:>8,} ${r['code_roi']:>+10.4f} {trend} {r['regime'] or '?':<10}")
+
+          # Export for GITHUB_STEP_SUMMARY
+          summary_data = {
+              "snapshots": len(records),
+              "cumulative_roi": cumulative_roi,
+              "total_pnl_growth": total_pnl_growth,
+              "total_code_changes": total_code_changes,
+              "improving": improving,
+              "latest": latest,
+              "roi_series": roi_series,
+          }
+          Path("/tmp/roi_summary.json").write_text(json.dumps(summary_data))
+          PY
+
+      - name: Write GitHub Step Summary
+        run: |
+          python3 - << 'PY' >> $GITHUB_STEP_SUMMARY
+          import json
+          from pathlib import Path
+
+          f = Path("/tmp/roi_summary.json")
+          if not f.exists():
+              print("# 📊 Code ROI\nNot enough data yet.")
+              exit()
+
+          d = json.loads(f.read_text())
+          series = d["roi_series"]
+          latest = d["latest"]
+
+          trend_icon = "📈" if d["improving"] else "📉"
+
+          print("# 📊 Code → Profit ROI Report")
+          print()
+          print("## Summary")
+          print(f"| Metric | Value |")
+          print(f"|--------|-------|")
+          print(f"| Snapshots | {d['snapshots']} |")
+          print(f"| All-time P&L growth | **${d['total_pnl_growth']:+.2f}** |")
+          print(f"| Total code changed | {d['total_code_changes']:,} lines |")
+          print(f"| Cumulative ROI | **${d['cumulative_roi']:+.4f} per 100 lines** |")
+          print(f"| Trend | {trend_icon} {'Improving' if d['improving'] else 'Declining'} |")
+          print(f"| Latest win rate | {latest['win_rate']:.0%} |")
+          print(f"| Latest 7d P&L | ${latest['pnl_7d']:+.2f} |")
+          print(f"| RL regime | `{latest.get('regime', '?')}` |")
+          print()
+
+          print("## Profitability by Code Batch")
+          print()
+          print("| Date | SHA | 7d P&L | Win Rate | Lines Changed | ROI per 100 loc | Regime |")
+          print("|------|-----|--------|----------|---------------|-----------------|--------|")
+          for r in series:
+              icon = "🟢" if r["pnl_delta"] > 0 else ("🔴" if r["pnl_delta"] < 0 else "⬜")
+              print(f"| {r['date']} | `{r['sha']}` | {icon} ${r['pnl_7d']:+.2f} | {r['win_rate']:.0%} | {r['lines_changed']:,} | **${r['code_roi']:+.4f}** | {r.get('regime','?')} |")
+
+          print()
+          print("---")
+          print("> 📌 Snapshots pushed by Pi at 4:30 PM ET after each trading day.")
+          print("> ROI = (7d P&L delta) / (lines changed since last snapshot) × 100")
+          PY
