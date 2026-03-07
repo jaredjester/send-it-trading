@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import signal as _signal
 import threading as _threading
 """

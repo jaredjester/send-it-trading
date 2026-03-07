@@ -2,7 +2,7 @@
 """
 Standalone scanner runner — no relative imports, designed for cron.
 
-Writes output to: ~/shared/stockbot/strategy_v2/scanner_signals.json
+Writes output to: engine/scanner_signals.json (relative to repo root)
 Orchestrator reads this file each cycle and boosts signal scores.
 
 Cron schedule:
@@ -30,7 +30,7 @@ logger = logging.getLogger("run_scanners")
 SCRIPT_DIR = Path(__file__).parent.resolve()
 STOCKBOT_DIR = SCRIPT_DIR.parent
 OUTPUT_FILE = STOCKBOT_DIR / "scanner_signals.json"
-LOG_FILE = STOCKBOT_DIR.parent / "logs" / "scanners.log"
+LOG_FILE = Path(os.getenv('LOG_DIR', str(STOCKBOT_DIR.parent / 'engine' / 'logs'))) / 'scanners.log'
 
 # Add stockbot dir + repo root to path so we can import scanners/modules
 sys.path.insert(0, str(STOCKBOT_DIR.parent))  # ~/shared/

@@ -29,13 +29,7 @@ except Exception:
     HAS_ATTRIBUTION = False
 # conviction_manager removed — pure systematic alpha (no conviction plays)
 
-try:
-    from scanners.orchestrator_scanner_patch import load_scanner_signals, scanner_score_boost
-    HAS_SCANNER = True
-except ImportError:
-    HAS_SCANNER = False
-    def load_scanner_signals(): return {}
-    def scanner_score_boost(s, d): return 0
+# Scanner signals loaded natively via _load_scanner_signals() / _scanner_boost()
 
 try:
     from alpha_engine import AlphaEngine
@@ -91,8 +85,6 @@ class SimpleOrchestrator:
         logger.info("=" * 60)
 
         self.alpaca = AlpacaClient(base_url="https://api.alpaca.markets")
-        # conviction_mgr removed
-        self._clear_gme_conviction()
 
         if HAS_ALPHA_ENGINE:
             try:
@@ -166,23 +158,6 @@ class SimpleOrchestrator:
             f"size_mult={cfg('rl_size_multiplier')}"
         )
         logger.info("=" * 60)
-
-    def _clear_gme_conviction(self):
-        """Remove GME from active convictions."""
-        try:
-            convictions_path = BASE_DIR / "state/convictions.json"
-            if convictions_path.exists():
-                with open(convictions_path) as f:
-                    data = json.load(f)
-                if "GME" in data:
-                    del data["GME"]
-                    with open(convictions_path, "w") as f:
-                        json.dump(data, f, indent=2)
-                    logger.info("✓ GME removed from convictions")
-            else:
-                logger.info("No convictions file found (already clean)")
-        except Exception as e:
-            logger.warning(f"Could not clear GME conviction: {e}")
 
     def _load_ic_state(self):
         """Load IC metrics for signal kill enforcement."""
@@ -419,9 +394,30 @@ class SimpleOrchestrator:
 
         return opportunities
 
-    def _load_scanner_signals(self):
-        """Refresh scanner signals from disk."""
-        return load_scanner_signals() if HAS_SCANNER else {}
+    def _load_scanner_signals(self) -> dict:
+        """Load scanner signals from engine/scanner_signals.json (written by cron scanners)."""
+        try:
+            path = BASE_DIR / "scanner_signals.json"
+            if not path.exists():
+                return {}
+            data = json.loads(path.read_text())
+            # Build {symbol: play_data} dict preserving all_plays order (rank matters for boost)
+            return {p["symbol"]: p for p in data.get("all_plays", []) if p.get("symbol")}
+        except Exception as exc:
+            logger.debug("scanner_signals load failed: %s", exc)
+            return {}
+
+    def _scanner_boost(self, symbol: str) -> int:
+        """Score boost based on pre-ranked scanner signal position."""
+        signals = getattr(self, "_scanner_signals", {})
+        if symbol not in signals:
+            return 0
+        rank = list(signals.keys()).index(symbol)
+        if rank < 3:
+            return 15
+        elif rank < 10:
+            return 10
+        return 5
 
     async def score_opportunity(self, opp):
         """Score with IC-killed signals filtered out.
@@ -507,12 +503,11 @@ class SimpleOrchestrator:
                 elif screener_type in ("finviz_breakout", "finviz_momentum", "gap"):
                     raw_score = min(raw_score + 8, 100)
 
-                # Legacy scanner signal boost from scanner_signals.json
-                if HAS_SCANNER and hasattr(self, "_scanner_signals"):
-                    boost = scanner_score_boost(symbol, self._scanner_signals)
-                    if boost:
-                        raw_score = min(raw_score + boost, 100)
-                        logger.info(f"  {symbol} scanner boost +{boost} → {raw_score:.0f}")
+                # Scanner signal boost (from cron-written scanner_signals.json)
+                boost = self._scanner_boost(symbol)
+                if boost:
+                    raw_score = min(raw_score + boost, 100)
+                    logger.info(f"  {symbol} scanner boost +{boost} → {raw_score:.0f}")
 
                 logger.info(f"  {symbol} alpha score={raw_score:.1f} (type={screener_type})")
                 return raw_score

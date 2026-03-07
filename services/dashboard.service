@@ -1,15 +1,18 @@
+# Template — run install.sh to generate configured versions with correct paths
+# Or replace REPO_DIR with your absolute repo path and USERNAME with your user
+
 [Unit]
 Description=Send It Trading — Live Dashboard
 After=network.target
 
 [Service]
 Type=simple
-User=%i
-WorkingDirectory=%h/send-it-trading
-ExecStart=/usr/bin/python3 %h/send-it-trading/dashboard/api.py
+User=USERNAME
+WorkingDirectory=REPO_DIR
+ExecStart=REPO_DIR/venv/bin/python REPO_DIR/dashboard/api.py
 Restart=always
 RestartSec=10
-EnvironmentFile=%h/send-it-trading/.env
+EnvironmentFile=REPO_DIR/.env
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=send-it-dashboard
