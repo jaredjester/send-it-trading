@@ -240,6 +240,17 @@
     .plan-bar-fill    { position:absolute; left:0; top:0; height:100%; border-radius:3px; }
     .plan-labels { display:flex; justify-content:space-between; font-size:8px; color:var(--t3); }
     .plan-summary { display:flex; gap:14px; padding:8px 14px; background:rgba(255,255,255,.03); font-size:9px; flex-wrap:wrap; }
+    .sys-card { padding:16px; margin-bottom:10px; }
+    .sys-title { font-size:12px; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+    .sys-grid { display:grid; gap:8px; }
+    .sys-table { width:100%; border-collapse:collapse; font-size:10px; }
+    .sys-table th, .sys-table td { text-align:left; padding:6px 4px; border-bottom:1px solid rgba(255,255,255,.05); }
+    .sys-table th { text-transform:uppercase; letter-spacing:.5px; color:var(--t2); font-size:9px; }
+    .pill { padding:1px 6px; border-radius:999px; font-weight:600; font-size:9px; display:inline-flex; align-items:center; gap:4px; }
+    .pill-ok    { background:rgba(0,230,118,.15); color:var(--green); }
+    .pill-warn  { background:rgba(255,145,0,.15); color:var(--orange); }
+    .pill-bad   { background:rgba(255,23,68,.15); color:var(--red); }
+    .sys-logs { margin-top:6px; font-size:9px; color:var(--t3); max-height:120px; overflow:auto; border:1px solid rgba(255,255,255,.05); border-radius:10px; padding:6px; background:rgba(255,255,255,.02); }
     .plan-summary span { color:var(--t2); }
     .plan-summary b { color:var(--t1); }
     .oc-alert { background:rgba(255,215,0,.12); border:1px solid rgba(255,215,0,.3); border-radius:6px; padding:8px 12px; margin:8px 14px; font-size:10px; color:var(--yellow); animation:pulse 2s infinite; }
@@ -404,6 +415,25 @@
   <div class="card status-bar" style="margin-top:8px;">
     <div><div class="svc-name">Options V1 Bot</div><div class="svc-time" id="bot-time">—</div></div>
     <span class="badge badge-g" id="bot-badge">—</span>
+  </div>
+
+  <div class="slabel" style="margin-top:10px;">Processes</div>
+  <div class="card sys-card">
+    <div class="sys-title">Systemd Services</div>
+    <div class="sys-grid">
+      <table class="sys-table" id="services-table">
+        <thead><tr><th>Service</th><th>Status</th><th>PID</th><th>Last exit</th></tr></thead>
+        <tbody><tr><td colspan="4" style="color:var(--t3);padding:8px 0;">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="sys-title" style="margin-top:14px;">Docker Containers</div>
+    <div class="sys-grid">
+      <table class="sys-table" id="containers-table">
+        <thead><tr><th>Name</th><th>Status</th><th>Mode</th><th>CPU</th><th>Mem</th></tr></thead>
+        <tbody><tr><td colspan="5" style="color:var(--t3);padding:8px 0;">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="sys-logs" id="sys-log-panel" style="display:none;"></div>
   </div>
 
   <!-- LOG -->
@@ -1016,7 +1046,83 @@
   // Load trades immediately on page load
   fetch('/api/trades').then(r=>r.json()).then(onTrades).catch(()=>{});
 
+  async function refreshProcesses(){
+    try {
+      const [svcRes, contRes] = await Promise.all([
+        fetch('/api/system/services').then(r=>r.json()),
+        fetch('/api/system/containers').then(r=>r.json())
+      ]);
+      renderServices((svcRes && svcRes.services) || []);
+      renderContainers((contRes && contRes.containers) || []);
+    } catch(err) { console.warn('process refresh failed', err); }
+  }
+
+  function renderServices(list){
+    const tbody = document.querySelector('#services-table tbody');
+    if(!tbody) return;
+    if(!list.length){
+      tbody.innerHTML = '<tr><td colspan="4" style="padding:8px 0;color:var(--t3);">No data</td></tr>';}
+    else {
+      tbody.innerHTML = list.map(s => {
+        const state = (s.active_state||'').toLowerCase();
+        const pillCls = state==='active' ? 'pill pill-ok' : state==='activating' ? 'pill pill-warn' : 'pill pill-bad';
+        return `<tr>
+          <td>${s.service}</td>
+          <td><span class="${pillCls}">${s.active_state||'?'}</span></td>
+          <td>${s.pid||'-'}</td>
+          <td>${s.last_exit||'-'}<button style="margin-left:8px;font-size:9px;" onclick="loadServiceLogs('${s.service}')">logs</button></td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  function renderContainers(list){
+    const tbody = document.querySelector('#containers-table tbody');
+    if(!tbody) return;
+    if(!list.length){
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:8px 0;color:var(--t3);">No containers</td></tr>';}
+    else {
+      tbody.innerHTML = list.map(c => {
+        const status = (c.status||'').toLowerCase();
+        const pillCls = status.includes('up') ? 'pill pill-ok' : status.includes('exit') ? 'pill pill-bad' : 'pill pill-warn';
+        return `<tr>
+          <td>${c.name}</td>
+          <td><span class="${pillCls}">${c.status}</span><button style="margin-left:6px;font-size:9px;" onclick="loadContainerLogs('${c.name}')">logs</button></td>
+          <td>${c.worker_id||c.alpaca_mode||'-'}</td>
+          <td>${c.cpu||'-'}</td>
+          <td>${c.memory||'-'}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  async function loadContainerLogs(name){
+    try {
+      const res = await fetch(`/api/system/container/${name}/logs`);
+      const data = await res.json();
+      updateLogPanel(`Container: ${name}`, data.logs||[]);
+    } catch(err) { console.warn('container logs failed', err); }
+  }
+
+  async function loadServiceLogs(name){
+    try {
+      const res = await fetch(`/api/system/service/${name}/logs`);
+      const data = await res.json();
+      updateLogPanel(`Service: ${name}`, data.logs||[]);
+    } catch(err) { console.warn('service logs failed', err); }
+  }
+
+  function updateLogPanel(title, lines){
+    const panel = document.getElementById('sys-log-panel');
+    if(!panel) return;
+    if(!lines || !lines.length){ panel.style.display='none'; return; }
+    panel.style.display='block';
+    panel.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">${title}</div><pre style="font-family:'JetBrains Mono','SFMono-Regular',monospace;font-size:9px;white-space:pre-wrap;">${(lines||[]).join('\n')}</pre>`;
+  }
+
   setInterval(()=>{ $('clock').textContent=new Date().toLocaleString(); }, 1000);
+  refreshProcesses();
+  setInterval(refreshProcesses, 10000);
   connect();
 </script>
 </body>

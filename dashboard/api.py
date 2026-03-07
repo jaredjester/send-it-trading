@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from shlex import split as shlex_split
 
 # ─── Path Setup ──────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,6 +40,9 @@ for d in [DATA_DIR, STATE_DIR, LOG_DIR, EVAL_DIR]:
 PORT         = int(os.getenv('DASHBOARD_PORT', '5555'))
 BOT_SERVICE  = os.getenv('BOT_SERVICE', 'mybot')
 PAPER        = os.getenv('ALPACA_PAPER', '').lower() in ('1', 'true', 'yes')
+COMPOSE_PROJECT = os.getenv('COMPOSE_PROJECT_NAME', 'send-it-trading')
+MONITORED_SERVICES = [s.strip() for s in os.getenv('DASHBOARD_SERVICES', 'send-it-bot,send-it-engine,send-it-dashboard').split(',') if s.strip()]
+DEFAULT_LOG_LINES = int(os.getenv('DASHBOARD_LOG_LINES', '60'))
 
 sys.path.insert(0, str(REPO_DIR))
 sys.path.insert(0, str(BASE_DIR))
@@ -62,6 +66,20 @@ LIVE_CFG_FILE = EVAL_DIR / 'live_config.json'
 # ─── Flask App ───────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder=str(BASE_DIR / 'templates'))
 CORS(app)
+
+
+def _run_cmd(cmd, timeout=5):
+    """Run shell command safely and return stdout (str)."""
+    try:
+        if isinstance(cmd, str):
+            cmd = shlex_split(cmd)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if result.returncode == 0:
+            return result.stdout.strip()
+        app.logger.warning("Command %s failed (%s): %s", cmd, result.returncode, result.stderr.strip())
+    except Exception as exc:
+        app.logger.warning("Command %s raised %s", cmd, exc)
+    return ""
 
 # ─── Alpaca Client ───────────────────────────────────────────────────────────
 from core.alpaca_client import AlpacaClient
@@ -154,6 +172,116 @@ def _service_running(name):
         return False
 
 
+
+
+def _systemd_status(service: str) -> dict:
+    props = ["ActiveState", "SubState", "Result", "MainPID", "ExecMainStatus"]
+    raw = _run_cmd([
+        "systemctl", "show", service, "--no-page",
+        "--property=" + ",".join(props)
+    ])
+    data = {p: None for p in props}
+    for line in raw.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            data[k] = v
+    logs = _run_cmd([
+        "journalctl", "-u", service, "-n", str(DEFAULT_LOG_LINES), "--no-pager"
+    ])
+    return {
+        "service": service,
+        "active_state": data.get("ActiveState"),
+        "sub_state": data.get("SubState"),
+        "result": data.get("Result"),
+        "pid": data.get("MainPID"),
+        "last_exit": data.get("ExecMainStatus"),
+        "logs": logs.splitlines() if logs else []
+    }
+
+
+def _docker_stats_map() -> dict:
+    stats_raw = _run_cmd([
+        "docker", "stats", "--no-stream",
+        "--format", "{{.Name}}||{{.CPUPerc}}||{{.MemUsage}}||{{.NetIO}}||{{.BlockIO}}"
+    ], timeout=8)
+    stats = {}
+    for line in stats_raw.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("||")
+        if len(parts) >= 5:
+            stats[parts[0]] = {
+                "cpu": parts[1],
+                "memory": parts[2],
+                "net_io": parts[3],
+                "block_io": parts[4],
+            }
+    return stats
+
+
+def _docker_env(name: str) -> dict:
+    raw = _run_cmd(["docker", "inspect", "-f", "{{json .Config.Env}}", name])
+    if not raw:
+        return {}
+    try:
+        env_list = json.loads(raw)
+        env_map = {}
+        for item in env_list:
+            if "=" in item:
+                k, v = item.split("=", 1)
+                env_map[k] = v
+        return env_map
+    except Exception:
+        return {}
+
+
+def _docker_logs(name: str, lines: int = DEFAULT_LOG_LINES) -> list:
+    logs = _run_cmd([
+        "docker", "logs", name, "--tail", str(lines)
+    ], timeout=8)
+    return logs.splitlines() if logs else []
+
+
+def _docker_containers() -> list:
+    ps_raw = _run_cmd([
+        "docker", "ps", "-a",
+        "--format", "{{.Names}}||{{.ID}}||{{.Image}}||{{.Status}}||{{.RunningFor}}"
+    ])
+    stats = _docker_stats_map()
+    containers = []
+    for line in ps_raw.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("||")
+        if len(parts) < 5:
+            continue
+        name, cid, image, status, running_for = parts[:5]
+        if COMPOSE_PROJECT and not name.startswith(COMPOSE_PROJECT):
+            continue
+        env = _docker_env(name)
+        stat = stats.get(name, {})
+        containers.append({
+            "name": name,
+            "id": cid,
+            "image": image,
+            "status": status,
+            "uptime": running_for,
+            "cpu": stat.get("cpu"),
+            "memory": stat.get("memory"),
+            "net_io": stat.get("net_io"),
+            "block_io": stat.get("block_io"),
+            "alpaca_mode": env.get("ALPACA_MODE"),
+            "worker_id": env.get("WORKER_ID"),
+            "config_override": env.get("CONFIG_OVERRIDE"),
+        })
+    return containers
+
+
+def _service_logs(service: str, lines: int = DEFAULT_LOG_LINES) -> list:
+    logs = _run_cmd([
+        "journalctl", "-u", service, "-n", str(lines), "--no-pager"
+    ])
+    return logs.splitlines() if logs else []
 def _log_last_line(log_path, skip_separators=True):
     """Get last meaningful line from a log file."""
     if not log_path.exists():
@@ -564,6 +692,27 @@ def api_plans():
 @app.route('/api/trades')
 def api_trades():
     return jsonify(_load_trades())
+
+
+@app.route('/api/system/services')
+def api_system_services():
+    data = [_systemd_status(s) for s in MONITORED_SERVICES]
+    return jsonify({"services": data})
+
+
+@app.route('/api/system/containers')
+def api_system_containers():
+    return jsonify({"containers": _docker_containers()})
+
+
+@app.route('/api/system/container/<name>/logs')
+def api_container_logs(name):
+    return jsonify({"name": name, "logs": _docker_logs(name)})
+
+
+@app.route('/api/system/service/<name>/logs')
+def api_service_logs(name):
+    return jsonify({"service": name, "logs": _service_logs(name)})
 
 
 @app.route('/api/rl_threshold')
