@@ -24,6 +24,7 @@ env/
 *.bak
 *.bak.*
 .DS_Store
+._*
 
 # Evolution runtime outputs
 evolution/workers/*/state/*
