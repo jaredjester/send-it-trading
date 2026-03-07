@@ -103,6 +103,7 @@ class GapScanner:
         
         return {
             'symbol': symbol,
+            'type': 'gap',
             'previous_close': yesterday_close,
             'current_price': current_price,
             'gap_pct': gap_pct,

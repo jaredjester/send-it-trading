@@ -437,6 +437,7 @@ class SimpleOrchestrator:
                     raw_score = min(raw_score + boost, 100)
                     logger.info(f"  {symbol} scanner boost +{boost} → {raw_score:.0f}")
 
+                raw_score = max(0.0, raw_score)  # clamp: never return negative scores
                 logger.info(f"  {symbol} alpha score={raw_score:.1f} (type={screener_type})")
                 return raw_score
 
@@ -696,7 +697,7 @@ class SimpleOrchestrator:
         self._cycle_top = [
             (c.get("score", 0), c.get("symbol", ""), c.get("type") or c.get("sig_type") or "unknown")
             for c in top
-            if c.get("score", 0) > 0  # never surface zero-score candidates
+            if c.get("score", 0) >= cfg("min_score_threshold") * 0.5  # require at least half-threshold
         ]
         # Fetch portfolio for report (non-blocking best-effort)
         try:
