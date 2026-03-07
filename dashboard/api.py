@@ -369,13 +369,19 @@ def _build_trade_display(t):
 
 # ─── Shared Data Loaders ────────────────────────────────────────────────────
 def _load_plans():
-    """Load all trade plans with display dicts and summary stats."""
+    """Load all trade plans with display dicts and summary stats. Deduplicates by plan_id."""
     # Engine plans (strategy_v2 options-first)
     plans = _read_jsonl(PLANS_FILE)
-    # Bot plans (options_v1 DCVX strategy)
+    seen_ids = {p.get('plan_id') for p in plans if p.get('plan_id')}
+    # Bot plans (options_v1 DCVX) — skip any already present in engine file
     for p in _read_jsonl(DATA_DIR / 'trade_plans.jsonl'):
+        pid = p.get('plan_id')
+        if pid and pid in seen_ids:
+            continue
         p.setdefault('strategy', 'options_v1_dcvx')
         plans.append(p)
+        if pid:
+            seen_ids.add(pid)
     for p in plans:
         p['display'] = _build_plan_display(p)
 
@@ -692,6 +698,34 @@ def api_plans():
 @app.route('/api/trades')
 def api_trades():
     return jsonify(_load_trades())
+
+
+@app.route('/api/positions')
+def api_positions():
+    """Dedicated positions endpoint — returns enriched list from Alpaca."""
+    if not ALPACA_AVAILABLE:
+        return jsonify({'error': 'Alpaca unavailable', 'positions': []})
+    try:
+        raw = alpaca_client.get_positions()
+        positions = [_enrich_position(p) for p in raw]
+        options = [p for p in positions if p.get('_option')]
+        equities = [p for p in positions if not p.get('_option')]
+        options_pl = sum(p.get('unrealized_pl', 0) for p in options)
+        equity_pl  = sum(p.get('unrealized_pl', 0) for p in equities)
+        return jsonify({
+            'positions':    positions,
+            'options':      options,
+            'equities':     equities,
+            'count':        len(positions),
+            'options_count': len(options),
+            'equity_count': len(equities),
+            'options_pl':   round(options_pl, 4),
+            'equity_pl':    round(equity_pl, 4),
+            'total_pl':     round(options_pl + equity_pl, 4),
+            'timestamp':    datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'positions': []})
 
 
 @app.route('/api/system/services')
