@@ -22,8 +22,8 @@ import alpaca_env
 alpaca_env.bootstrap()
 from orchestrator_simple import SimpleOrchestrator
 
-_TG_TOKEN = "7789884565:AAFm8-xf3zffBKvMJCen3U1B4h7Ph5UMdBU"
-_TG_CHAT  = "-1002553012880"  # stockbot group channel
+_TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+_TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")  # stockbot group channel
 _WORKER_ID = os.getenv("WORKER_ID", "live")
 _ALPACA_MODE = os.getenv("ALPACA_MODE", "live")
 
@@ -31,6 +31,9 @@ _ALPACA_MODE = os.getenv("ALPACA_MODE", "live")
 def _tg(msg: str):
     """Fire-and-forget Telegram message (live engine only)."""
     if _ALPACA_MODE != "live" or _WORKER_ID not in ("live", "", None):
+        return
+    if not _TG_TOKEN or not _TG_CHAT:
+        logger.debug("Telegram credentials missing; skipping message")
         return
     try:
         _requests.post(
