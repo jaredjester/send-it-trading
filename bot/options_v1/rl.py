@@ -9,7 +9,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-MEMORY_PATH  = Path(str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent.parent / 'data'))) / 'trade_memory.jsonl'))
+MEMORY_PATH  = Path(str(Path(os.getenv('STATE_DIR', str(Path(__file__).resolve().parent.parent.parent / 'engine' / 'state'))) / 'trade_memory.jsonl'))
 WEIGHTS_PATH = Path(str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent.parent / 'data'))) / 'rl_weights.json'))
 
 

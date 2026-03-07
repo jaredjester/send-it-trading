@@ -27,7 +27,7 @@ try:
     HAS_ATTRIBUTION = True
 except Exception:
     HAS_ATTRIBUTION = False
-from conviction_manager import ConvictionManager
+# conviction_manager removed — pure systematic alpha (no conviction plays)
 
 try:
     from scanners.orchestrator_scanner_patch import load_scanner_signals, scanner_score_boost
@@ -91,7 +91,7 @@ class SimpleOrchestrator:
         logger.info("=" * 60)
 
         self.alpaca = AlpacaClient(base_url="https://api.alpaca.markets")
-        self.conviction_mgr = ConvictionManager()
+        # conviction_mgr removed
         self._clear_gme_conviction()
 
         if HAS_ALPHA_ENGINE:
@@ -353,7 +353,7 @@ class SimpleOrchestrator:
             qty = float(pos.get("qty", 0))
 
             is_zombie = loss_pct < zombie_thresh or value < min_val
-            is_conviction = self.conviction_mgr.is_conviction_symbol(symbol)
+            is_conviction = False  # conviction plays removed
             is_untradeable = symbol in untradeable
 
             if is_zombie and not is_conviction and not is_untradeable:
@@ -836,12 +836,7 @@ class SimpleOrchestrator:
             except Exception as _oe:
                 logger.warning(f"Options management error: {_oe}")
 
-        # 2. Convictions
-        convictions = self.conviction_mgr.get_active_convictions()
-        if convictions:
-            logger.info(f"Active convictions: {list(convictions.keys())}")
-        else:
-            logger.info("No conviction positions (clean slate)")
+        # 2. Convictions removed — pure systematic alpha
 
         # 3. Scan + merge battle plan, execute
         fresh_opps = await self.scan_opportunities()

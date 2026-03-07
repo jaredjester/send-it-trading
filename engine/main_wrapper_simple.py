@@ -117,7 +117,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(REPO_DIR / 'logs/trading.log'),
+        logging.FileHandler(Path(os.getenv('LOG_DIR', str(REPO_DIR / 'engine' / 'logs'))) / 'trading.log'),
         logging.StreamHandler()
     ]
 )

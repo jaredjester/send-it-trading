@@ -56,7 +56,7 @@ except Exception:
     _tg = None
 
 # ── Logging ────────────────────────────────────────────────────────────────────
-LOG_FILE = str(Path(os.getenv('DATA_DIR', str(BOT_DIR.parent / 'data'))) / 'trading.log')
+LOG_FILE = str(Path(os.getenv('LOG_DIR', str(BOT_DIR.parent / 'engine' / 'logs'))) / 'bot.log')
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
