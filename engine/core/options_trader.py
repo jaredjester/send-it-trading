@@ -161,8 +161,8 @@ class OptionsTrader:
         if not contract:
             return self._no_trade(
                 f"No affordable liquid {direction} contract found for {symbol} "
-                f"(budget=${max_per_contract:.0f}, min_OI={int(_cfg("options.min_open_interest", 10))}, "
-                f"window={int(_cfg("options.min_expiry_days", 14))}-{int(_cfg("options.max_expiry_days", 35))}d)"
+                f"(budget=${max_per_contract:.0f}, min_OI={int(_cfg('options.min_open_interest', 10))}, "
+                f"window={int(_cfg('options.min_expiry_days', 14))}-{int(_cfg('options.max_expiry_days', 35))}d)"
             )
 
         contract_symbol = contract["symbol"]
