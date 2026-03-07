@@ -9,6 +9,9 @@ import os
 import requests
 from datetime import datetime
 
+import alpaca_env
+alpaca_env.bootstrap()
+
 from core.config import load_config
 from portfolio_optimizer import PortfolioOptimizer
 from execution_gate import ExecutionGate

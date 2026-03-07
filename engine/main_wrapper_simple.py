@@ -16,6 +16,8 @@ REPO_DIR = BASE_DIR.parent
 sys.path.insert(0, str(BASE_DIR))
 
 import requests as _requests
+import alpaca_env
+alpaca_env.bootstrap()
 from orchestrator_simple import SimpleOrchestrator
 
 def _apply_config_override():

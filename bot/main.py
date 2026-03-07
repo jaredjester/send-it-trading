@@ -23,6 +23,9 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import alpaca_env
+alpaca_env.bootstrap()
+
 from options_v1.data       import market_data_bundle, get_risk_free_rate, get_spot, get_option_chain, get_account, get_positions, get_option_snapshot
 from options_v1.pricing    import bs_price, bs_greeks, pnl_distribution, OptionSpec
 from options_v1.kelly      import compute_kelly, position_size

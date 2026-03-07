@@ -67,6 +67,8 @@ def import_scanners():
 
 def run(mode="full"):
     load_env()
+    import alpaca_env
+    alpaca_env.bootstrap()
     GapScanner, CatalystScanner = import_scanners()
 
     results = {

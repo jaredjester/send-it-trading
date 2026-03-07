@@ -9,9 +9,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-key = os.getenv("ALPACA_API_LIVE_KEY") or os.getenv("APCA_API_KEY_ID")
-secret = os.getenv("ALPACA_API_SECRET") or os.getenv("APCA_API_SECRET_KEY")
-BASE = "https://api.alpaca.markets"
+import alpaca_env
+alpaca_env.bootstrap()
+
+key = os.getenv("APCA_API_KEY_ID")
+secret = os.getenv("APCA_API_SECRET_KEY")
+BASE = os.getenv("ALPACA_BASE_URL", "https://api.alpaca.markets")
 headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
 
 EXIT_SYMBOLS = ["GME", "AVGR", "BGXXQ", "MOTS"]

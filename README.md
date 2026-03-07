@@ -17,7 +17,7 @@ git clone https://github.com/jaredjester/send-it-trading.git
 cd send-it-trading
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env — set ALPACA_API_KEY and ALPACA_API_SECRET (that's all that's required)
+# Edit .env — set ALPACA_LIVE_KEY/SECRET and ALPACA_PAPER_KEY/SECRET (single source)
 
 # Run each component:
 python bot/main.py            # Intelligence scanner (runs overnight prep)
@@ -30,8 +30,10 @@ python dashboard/api.py       # Dashboard → http://localhost:5555
 Only two required env vars:
 
 ```env
-ALPACA_API_KEY=your_key
-ALPACA_API_SECRET=your_secret
+ALPACA_LIVE_KEY=your_live_key
+ALPACA_LIVE_SECRET=your_live_secret
+ALPACA_PAPER_KEY=your_paper_key
+ALPACA_PAPER_SECRET=your_paper_secret
 ```
 
 Everything else has sensible defaults. Full reference in `.env.example`.

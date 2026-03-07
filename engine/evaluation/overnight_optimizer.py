@@ -11,6 +11,9 @@ import sys, json, logging, os, argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import alpaca_env
+alpaca_env.bootstrap()
+
 # --- Dev mode detection ---
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--dev", action="store_true")

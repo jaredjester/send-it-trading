@@ -6,6 +6,9 @@ import os, json, math, logging, requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import alpaca_env
+alpaca_env.bootstrap()
+
 def load_keys():
     # Try env vars first, then read .env line by line
     key = os.environ.get('ALPACA_API_LIVE_KEY', '')

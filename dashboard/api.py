@@ -22,6 +22,9 @@ BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent
 load_dotenv(BASE_DIR / '.env')
 
+import alpaca_env
+alpaca_env.bootstrap()
+
 # All data paths relative to BASE_DIR, overridable via env
 DATA_DIR  = Path(os.getenv('DATA_DIR',  str(REPO_DIR / 'data')))
 STATE_DIR = Path(os.getenv('STATE_DIR', str(REPO_DIR / 'state')))
@@ -63,8 +66,7 @@ CORS(app)
 from core.alpaca_client import AlpacaClient
 
 try:
-    base_url = "https://paper-api.alpaca.markets" if PAPER else "https://api.alpaca.markets"
-    alpaca_client = AlpacaClient(base_url=base_url)
+    alpaca_client = AlpacaClient(base_url=os.getenv('ALPACA_BASE_URL'))
     ALPACA_AVAILABLE = True
 except Exception as e:
     print(f"⚠️  Alpaca client unavailable: {e}")

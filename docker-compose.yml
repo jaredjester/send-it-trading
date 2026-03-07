@@ -38,7 +38,7 @@ services:
     command: python engine/main_wrapper_simple.py
     env_file: .env
     environment:
-      ALPACA_PAPER: "false"
+      ALPACA_MODE: "live"
       WORKER_ID: "live"
       CONFIG_OVERRIDE: ""
     volumes:
@@ -58,14 +58,8 @@ services:
     command: python engine/main_wrapper_simple.py
     env_file: .env
     environment:
-      ALPACA_PAPER: "true"
+      ALPACA_MODE: "paper"
       WORKER_ID: "aggressive"
-      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/aggressive/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.70, "mean_reversion.score_weight": 0.20,
@@ -83,14 +77,8 @@ services:
     command: python engine/main_wrapper_simple.py
     env_file: .env
     environment:
-      ALPACA_PAPER: "true"
+      ALPACA_MODE: "paper"
       WORKER_ID: "balanced"
-      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/balanced/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.55, "mean_reversion.score_weight": 0.35,
@@ -108,14 +96,8 @@ services:
     command: python engine/main_wrapper_simple.py
     env_file: .env
     environment:
-      ALPACA_PAPER: "true"
+      ALPACA_MODE: "paper"
       WORKER_ID: "conservative"
-      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/conservative/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.40, "mean_reversion.score_weight": 0.40,
@@ -133,14 +115,8 @@ services:
     command: python engine/main_wrapper_simple.py
     env_file: .env
     environment:
-      ALPACA_PAPER: "true"
+      ALPACA_MODE: "paper"
       WORKER_ID: "momentum"
-      ALPACA_API_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_LIVE_KEY: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      APCA_API_KEY_ID: "PKWXNUE7QPQ4ZV3XN2D2ALEHW2"
-      ALPACA_API_SECRET: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      APCA_API_SECRET_KEY: "59GGvcUkJCTzdwBAvqs2XM5pmwfxVFTQrcHNvZbvcuok"
-      ALPACA_BASE_URL: "https://paper-api.alpaca.markets"
       EVAL_DIR: /app/evolution/workers/momentum/eval
       CONFIG_OVERRIDE: >
         {"momentum.score_weight": 0.80, "mean_reversion.score_weight": 0.10,
@@ -163,6 +139,7 @@ services:
     command: python engine/evolution/optimizer.py --daemon
     env_file: .env
     environment:
+      ALPACA_MODE: "live"
       EVAL_DIR: /app/engine/evaluation       # writes champion to live engine config
       WORKERS_DIR: /app/evolution/workers    # reads worker results from here
     volumes:
