@@ -53,7 +53,8 @@ from options_v1             import insider_scanner
 from options_v1             import polymarket_scanner
 try:
     from options_v1 import telegram_alerts as _tg
-except Exception:
+except Exception as _e:
+    logging.getLogger('bot').warning('Telegram alerts unavailable: %s', _e)
     _tg = None
 
 # ── Logging ────────────────────────────────────────────────────────────────────

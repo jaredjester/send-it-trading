@@ -93,6 +93,28 @@ DEFAULTS: dict = {
     "finviz.score_preearnings":   70,
     "finviz.score_postearnings":  69,
     "finviz.score_relstrength":   66,
+    # ── Alpha Engine parameters (unified from master_config.json) ─────────────
+    "alpha.mean_reversion.enabled": True,
+    "alpha.mean_reversion.lookback_days": 20,
+    "alpha.mean_reversion.rsi_oversold": 35,
+    "alpha.mean_reversion.rsi_overbought": 65,
+    "alpha.mean_reversion.std_dev_threshold": 1.5,
+    "alpha.mean_reversion.volume_spike_min": 1.5,
+    "alpha.mean_reversion.rsi_period": 14,
+    "alpha.mean_reversion.target_hold_days": 5,
+    "alpha.mean_reversion.score_weight": 0.35,
+    "alpha.momentum.enabled": True,
+    "alpha.momentum.sma_short": 20,
+    "alpha.momentum.sma_long": 50,
+    "alpha.momentum.adx_threshold": 25,
+    "alpha.momentum.volume_growth_min": 0.1,
+    "alpha.momentum.target_hold_days": 10,
+    "alpha.momentum.score_weight": 0.55,
+    "alpha.sentiment.enabled": True,
+    "alpha.sentiment.positive_threshold": 0.2,
+    "alpha.sentiment.negative_threshold": -0.1,
+    "alpha.sentiment.score_weight": 0.10,
+
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

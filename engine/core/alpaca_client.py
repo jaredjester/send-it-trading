@@ -21,7 +21,7 @@ class AlpacaClient:
     """
     Unified Alpaca client with caching and retries.
 
-    Credentials: env vars (ALPACA_API_LIVE_KEY, ALPACA_API_SECRET) or master_config.json
+    Credentials: env vars (ALPACA_API_LIVE_KEY, ALPACA_API_SECRET)
     """
 
     def __init__(
@@ -35,7 +35,7 @@ class AlpacaClient:
     ):
         """
         Args:
-            config: Optional config dict. If None, loads from master_config.json.
+            config: Optional config dict. Reads from environment variables only.
             base_url: Override account/trading API base (default: paper or live from config)
             data_url: Override data API base
             cache_ttl: Bar cache TTL in seconds
@@ -59,7 +59,7 @@ class AlpacaClient:
         if not self.api_key or not self.api_secret:
             raise ValueError(
                 "Alpaca API credentials not found. Set ALPACA_API_LIVE_KEY/ALPACA_API_SECRET "
-                "environment variables or add to master_config.json"
+                "environment variables (ALPACA_API_LIVE_KEY, ALPACA_API_SECRET)"
             )
 
         self.base_url = (base_url

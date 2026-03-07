@@ -1,0 +1,9 @@
+{
+  "options.max_premium": 1.5,
+  "options.min_open_interest": 10,
+  "options.min_expiry_days": 14,
+  "options.max_expiry_days": 35,
+  "options.stop_loss_pct": 0.5,
+  "options.take_profit_pct": 1.0,
+  "options.expiry_guard_days": 3
+}

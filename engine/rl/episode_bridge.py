@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Episode Bridge — wires orchestrator trade events into the adaptive RL system.
+Episode Bridge — wires orchestrator trade events into the Thompson Sampling RL threshold learner.
 
 The existing adaptive/ system (EpisodeManager + QLearner) was built but never
 connected to the orchestrator. This bridge is the missing wire.
@@ -56,7 +56,7 @@ _ACTION_MULTIPLIERS = {
 
 class EpisodeBridge:
     """
-    Connects orchestrator events to the adaptive RL system.
+    Connects orchestrator events to the Thompson Sampling RL threshold learner.
     Gracefully degrades to no-op if adaptive/ modules are unavailable.
     """
 
@@ -252,7 +252,8 @@ class EpisodeBridge:
             try:
                 state = self._get_state(pv, start)
                 q_action = self.q_learner.get_action(state)
-            except Exception:
+            except Exception as e:
+                logger.debug("q_learner.get_action failed, defaulting to moderate_buy: %s", e)
                 q_action = "moderate_buy"
 
             # Write multipliers to live_config.json
@@ -312,7 +313,8 @@ class EpisodeBridge:
                 portfolio_value=portfolio_value,
                 start_value=start_value,
             )
-        except Exception:
+        except Exception as e:
+            logger.debug("get_current_state failed, returning 'unknown': %s", e)
             return "unknown"
 
     def _write_rl_decision(self, action: str, episode_return: float):

@@ -98,8 +98,8 @@ def _read_json(path):
     try:
         if path.exists():
             return json.loads(path.read_text(errors='replace'))
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug("_read_json(%s) failed: %s", path, e)
     return {}
 
 
@@ -112,10 +112,10 @@ def _read_jsonl(path):
                 if line.strip():
                     try:
                         items.append(json.loads(line))
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+                    except Exception as e:
+                        app.logger.debug("_read_jsonl line parse failed (%s): %s", path, e)
+    except Exception as e:
+        app.logger.debug("_read_jsonl(%s) failed: %s", path, e)
     return items
 
 
@@ -136,8 +136,8 @@ def _decode_option_symbol(symbol):
                     'strike':    strike,
                     'label':     f"{ticker} ${strike:.2f} {direction} exp {expiry[5:]}",
                 }
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug("_decode_option_symbol(%s) failed: %s", symbol, e)
     return None
 
 
@@ -824,8 +824,8 @@ def api_stream():
                         new_lines = [l.strip() for l in chunk.splitlines() if l.strip()]
                         if new_lines:
                             yield _event('log_lines', {'lines': new_lines})
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug("SSE log_lines read failed: %s", e)
 
             # Portfolio: every 5s
             if now - last_portfolio >= 5:
@@ -849,8 +849,8 @@ def api_stream():
                     if mt != last_intel_mtime:
                         last_intel_mtime = mt
                         yield _event('intel', _load_intel())
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug("SSE intel push failed: %s", e)
 
             # Signals: on file change
             try:
@@ -861,8 +861,8 @@ def api_stream():
                 if sig_mt > 0 and sig_mt != last_sig_mtime:
                     last_sig_mtime = sig_mt
                     yield _event('signals', _load_signals())
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug("SSE signals push failed: %s", e)
 
             # Plans: on file change
             try:
@@ -871,8 +871,8 @@ def api_stream():
                     if mt != last_plans_mtime:
                         last_plans_mtime = mt
                         yield _event('plans', _load_plans())
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug("SSE plans push failed: %s", e)
 
             # Keepalive every 25s
             if now - last_ping >= 25:

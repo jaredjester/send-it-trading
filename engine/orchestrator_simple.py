@@ -28,7 +28,13 @@ from core.dynamic_config import cfg, cfg_set
 
 from alpha_engine import AlphaEngine
 from core.monte_carlo import MonteCarloSimulator
-_online_learner = None
+try:
+    from rl.online_learner import OnlineLearner as _OL
+    _online_learner = _OL()
+except Exception as _e:
+    import logging as _log
+    _log.getLogger('orchestrator_simple').warning('OnlineLearner unavailable: %s', _e)
+    _online_learner = None
 from rl.episode_bridge import EpisodeBridge
 from core.options_trader import OptionsTrader
 logging.basicConfig(

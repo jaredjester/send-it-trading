@@ -7,6 +7,7 @@ import sys
 import json
 from datetime import datetime, timedelta
 from typing import Dict, Optional
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -34,7 +35,7 @@ class RapidIterationWorkflow:
         self.alpha_tracker = AlphaTracker()
         self.backtester = StrategyBacktester()
         
-        self.config_path = get_project_root() / "master_config.json"
+        self.config_path = Path(os.environ.get("EVAL_DIR", str(Path(__file__).parent))) / "live_config.json"
         self.current_config = self._load_current_config()
     
     def _load_current_config(self) -> Dict:
@@ -234,7 +235,7 @@ class RapidIterationWorkflow:
         
         Use if deployed change degraded performance.
         """
-        backup_pattern = f"master_config.backup_{backup_timestamp}*.json"
+        backup_pattern = f"live_config.backup_{backup_timestamp}*.json"
         backups = list(self.config_path.parent.glob(backup_pattern))
         
         if not backups:

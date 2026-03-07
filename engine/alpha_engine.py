@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from core.config import load_config
+from core.dynamic_config import cfg as _cfg
 
 
 class AlphaEngine:
@@ -32,31 +32,50 @@ class AlphaEngine:
     """
     
     def __init__(self, config_path: str | None = None):
-        """Initialize alpha engine with configuration."""
-        self.config = load_config(config_path)
-        acct = self.config.get("account", {})
-        self.api_key = acct.get("alpaca_api_key") or os.getenv("APCA_API_KEY_ID") or os.getenv("ALPACA_API_LIVE_KEY")
-        self.api_secret = acct.get("alpaca_secret_key") or os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_API_SECRET")
-        self.data_url = acct.get("alpaca_data_url", "https://data.alpaca.markets")
-        self.feed = acct.get("data_feed", "iex")
-        
-        self.headers = {
-            "APCA-API-KEY-ID": self.api_key,
-            "APCA-API-SECRET-KEY": self.api_secret
+        """Initialize alpha engine with configuration from dynamic_config.cfg()."""
+        # Build config dict from centralized cfg() — all values tunable via live_config.json
+        self.config = {
+            'mean_reversion': {
+                'enabled': bool(_cfg('alpha.mean_reversion.enabled', True)),
+                'lookback_days': int(_cfg('alpha.mean_reversion.lookback_days', 20)),
+                'rsi_oversold': int(_cfg('alpha.mean_reversion.rsi_oversold', 35)),
+                'rsi_overbought': int(_cfg('alpha.mean_reversion.rsi_overbought', 65)),
+                'std_dev_threshold': float(_cfg('alpha.mean_reversion.std_dev_threshold', 1.5)),
+                'volume_spike_min': float(_cfg('alpha.mean_reversion.volume_spike_min', 1.5)),
+                'rsi_period': int(_cfg('alpha.mean_reversion.rsi_period', 14)),
+                'target_hold_days': int(_cfg('alpha.mean_reversion.target_hold_days', 5)),
+                'score_weight': float(_cfg('alpha.mean_reversion.score_weight', 0.35)),
+            },
+            'momentum': {
+                'enabled': bool(_cfg('alpha.momentum.enabled', True)),
+                'sma_short': int(_cfg('alpha.momentum.sma_short', 20)),
+                'sma_long': int(_cfg('alpha.momentum.sma_long', 50)),
+                'adx_threshold': int(_cfg('alpha.momentum.adx_threshold', 25)),
+                'volume_growth_min': float(_cfg('alpha.momentum.volume_growth_min', 0.1)),
+                'target_hold_days': int(_cfg('alpha.momentum.target_hold_days', 10)),
+                'score_weight': float(_cfg('alpha.momentum.score_weight', 0.55)),
+            },
+            'sentiment': {
+                'enabled': bool(_cfg('alpha.sentiment.enabled', True)),
+                'positive_threshold': float(_cfg('alpha.sentiment.positive_threshold', 0.2)),
+                'negative_threshold': float(_cfg('alpha.sentiment.negative_threshold', -0.1)),
+                'score_weight': float(_cfg('alpha.sentiment.score_weight', 0.10)),
+            },
         }
-        
-        # Cache for bar data to reduce API calls
-        self.bar_cache = {}
-        self.cache_timestamps = {}
-        self.cache_ttl = self.config.get("data", {}).get("cache_ttl_seconds", 300)
-        
-        log_cfg = self.config.get("logging", {})
-        logging.basicConfig(
-            level=log_cfg.get("level", "INFO"),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        self.logger = logging.getLogger(__name__)
-    
+        self.api_key = os.getenv("APCA_API_KEY_ID") or os.getenv("ALPACA_API_LIVE_KEY")
+        self.api_secret = os.getenv("APCA_API_SECRET_KEY") or os.getenv("ALPACA_API_SECRET")
+        self.data_url = os.getenv("ALPACA_DATA_URL", "https://data.alpaca.markets")
+        self.feed = os.getenv("ALPACA_DATA_FEED", "iex")
+
+        self.bar_cache: Dict[str, List[Dict]] = {}
+        self.cache_ttl = 300  # 5 min
+        self.cache_timestamps: Dict[str, float] = {}
+
+        logger.info("AlphaEngine initialized (config via dynamic_config.cfg())")
+        logger.info(f"  Weights: MR={self.config['mean_reversion']['score_weight']:.2f} "
+                     f"Mom={self.config['momentum']['score_weight']:.2f} "
+                     f"Sent={self.config['sentiment']['score_weight']:.2f}")
+
     def _fetch_bars(self, symbol: str, days: int = 200) -> List[Dict]:
         """
         Fetch historical bar data from Alpaca with caching and retry logic.

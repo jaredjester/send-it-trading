@@ -8,7 +8,7 @@ from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
-PLANS_PATH = Path(str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent.parent / 'data'))) / 'trade_plans.jsonl'))
+PLANS_PATH = Path(str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent.parent / 'data'))) / 'bot_trade_plans.jsonl'))
 
 
 @dataclass
