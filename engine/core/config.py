@@ -34,3 +34,8 @@ def load_config(config_path=None) -> dict:
 
 # Backwards compat alias
 get_config = load_config
+
+
+def resolve_path(relative_path: str) -> Path:
+    """DEPRECATED — resolve a path relative to the engine directory."""
+    return get_project_root() / relative_path
