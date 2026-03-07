@@ -579,18 +579,18 @@ if __name__ == "__main__":
     test_symbols = ["AAPL", "MSFT", "GME"]
     
     for symbol in test_symbols:
-        print(f"\n{'='*60}")
-        print(f"Analyzing {symbol}")
-        print('='*60)
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Analyzing {symbol}")
+        logger.info('='*60)
         
         result = engine.score_opportunity(symbol, sentiment_score=0.7)
         
-        print(f"Score: {result['score']:.1f}")
-        print(f"Strategy: {result['strategy']}")
-        print(f"Confidence: {result['confidence']:.2f}")
-        print(f"Action: {result['suggested_action']}")
-        print(f"Position Type: {result['position_type']}")
-        print(f"Entry: ${result['entry_price']:.2f}")
-        print(f"Stop Loss: ${result['stop_loss']:.2f}")
-        print(f"Take Profit: ${result['take_profit']:.2f}")
-        print(f"Target Hold: {result['target_hold_days']} days")
+        logger.info(f"Score: {result['score']:.1f}")
+        logger.info(f"Strategy: {result['strategy']}")
+        logger.info(f"Confidence: {result['confidence']:.2f}")
+        logger.info(f"Action: {result['suggested_action']}")
+        logger.info(f"Position Type: {result['position_type']}")
+        logger.info(f"Entry: ${result['entry_price']:.2f}")
+        logger.info(f"Stop Loss: ${result['stop_loss']:.2f}")
+        logger.info(f"Take Profit: ${result['take_profit']:.2f}")
+        logger.info(f"Target Hold: {result['target_hold_days']} days")

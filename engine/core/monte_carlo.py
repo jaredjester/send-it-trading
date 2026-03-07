@@ -7,8 +7,8 @@ Usage:
     mc = MonteCarloSimulator(historical_returns, n_sims=10000)
     result = mc.analyze(kelly=0.69, current_size=0.69)
     
-    print(f"p99 drawdown: {result['drawdown_dist']['p99']:.1%}")
-    print(f"Recommended size: {result['recommended_size']:.1%}")
+    print(f"p99 drawdown: {result['drawdown_dist']['p99']:.1%}")  # noqa: T201
+    print(f"Recommended size: {result['recommended_size']:.1%}")  # noqa: T201
 """
 from __future__ import annotations
 
@@ -249,40 +249,40 @@ class MonteCarloSimulator:
             symbol: Optional symbol name for report header
         """
         header = f"Monte Carlo Analysis - {symbol}" if symbol else "Monte Carlo Analysis"
-        print(f"\n{'=' * 60}")
-        print(f"{header}")
-        print(f"{'=' * 60}\n")
+        print(f"\n{'=' * 60}")  # noqa: T201
+        print(f"{header}")  # noqa: T201
+        print(f"{'=' * 60}\n")  # noqa: T201
         
-        print(f"Simulations: {result.paths_simulated:,} paths × {result.n_periods} days\n")
+        print(f"Simulations: {result.paths_simulated:,} paths × {result.n_periods} days\n")  # noqa: T201
         
-        print("Position Sizing:")
-        print(f"  Kelly (conviction):     {result.kelly:>6.1%}")
-        print(f"  Edge CV (uncertainty):  {result.edge_cv:>6.2f}")
-        print(f"  Empirical Kelly:        {result.empirical_kelly:>6.1%}")
-        print(f"  Risk Adjusted:          {result.risk_adjusted_size:>6.1%}")
-        print(f"  Current Size:           {result.current_size:>6.1%}\n")
+        print("Position Sizing:")  # noqa: T201
+        print(f"  Kelly (conviction):     {result.kelly:>6.1%}")  # noqa: T201
+        print(f"  Edge CV (uncertainty):  {result.edge_cv:>6.2f}")  # noqa: T201
+        print(f"  Empirical Kelly:        {result.empirical_kelly:>6.1%}")  # noqa: T201
+        print(f"  Risk Adjusted:          {result.risk_adjusted_size:>6.1%}")  # noqa: T201
+        print(f"  Current Size:           {result.current_size:>6.1%}\n")  # noqa: T201
         
-        print("Drawdown Distribution:")
-        print(f"  Median (p50):           {result.drawdown_dist['p50']:>6.1%}")
-        print(f"  1-in-10 (p90):          {result.drawdown_dist['p90']:>6.1%}")
-        print(f"  1-in-20 (p95):          {result.drawdown_dist['p95']:>6.1%}")
-        print(f"  1-in-100 (p99):         {result.drawdown_dist['p99']:>6.1%}")
-        print(f"  Worst case (max):       {result.drawdown_dist['max']:>6.1%}\n")
+        print("Drawdown Distribution:")  # noqa: T201
+        print(f"  Median (p50):           {result.drawdown_dist['p50']:>6.1%}")  # noqa: T201
+        print(f"  1-in-10 (p90):          {result.drawdown_dist['p90']:>6.1%}")  # noqa: T201
+        print(f"  1-in-20 (p95):          {result.drawdown_dist['p95']:>6.1%}")  # noqa: T201
+        print(f"  1-in-100 (p99):         {result.drawdown_dist['p99']:>6.1%}")  # noqa: T201
+        print(f"  Worst case (max):       {result.drawdown_dist['max']:>6.1%}\n")  # noqa: T201
         
-        print(f"Verdict: {result.verdict}")
-        print(f"Recommendation: {result.recommended_size:.1%}")
+        print(f"Verdict: {result.verdict}")  # noqa: T201
+        print(f"Recommendation: {result.recommended_size:.1%}")  # noqa: T201
         
         if result.verdict in ('OVERSIZED', 'SLIGHTLY_OVERSIZED'):
             reduction = (result.current_size - result.recommended_size) * 100
-            print(f"\n⚠️  REDUCE position by {reduction:.1f} percentage points")
-            print(f"   OR accept 1-in-20 chance of {result.drawdown_dist['p95']:.1%} drawdown")
+            print(f"\n⚠️  REDUCE position by {reduction:.1f} percentage points")  # noqa: T201
+            print(f"   OR accept 1-in-20 chance of {result.drawdown_dist['p95']:.1%} drawdown")  # noqa: T201
         elif result.verdict in ('UNDERSIZED', 'SLIGHTLY_UNDERSIZED'):
             increase = (result.recommended_size - result.current_size) * 100
-            print(f"\n✅ Can INCREASE position by {increase:.1f} percentage points")
+            print(f"\n✅ Can INCREASE position by {increase:.1f} percentage points")  # noqa: T201
         else:
-            print(f"\n✅ Position size is OPTIMAL")
+            print(f"\n✅ Position size is OPTIMAL")  # noqa: T201
         
-        print(f"\n{'=' * 60}\n")
+        print(f"\n{'=' * 60}\n")  # noqa: T201
 
 
 def quick_analysis(returns: list[float], kelly: float, current_size: float, symbol: str = "") -> dict:
