@@ -29,6 +29,7 @@ LIVE_CONFIG = BASE_DIR / 'evaluation' / 'live_config.json'
 OPT_LOG = BASE_DIR / 'evaluation' / ('optimizer_dev_log.jsonl' if DEV_MODE else 'optimizer_log.jsonl')
 
 sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(BASE_DIR.parent))
 from evaluation.real_backtester import run_backtest
 
 # Production config — 13 symbols, 27 combos

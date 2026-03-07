@@ -21,7 +21,10 @@ import logging
 import requests
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+BOT_DIR = Path(__file__).resolve().parent
+REPO_DIR = BOT_DIR.parent
+sys.path.insert(0, str(BOT_DIR))
+sys.path.insert(0, str(REPO_DIR))
 
 import alpaca_env
 alpaca_env.bootstrap()
@@ -53,7 +56,7 @@ except Exception:
     _tg = None
 
 # ── Logging ────────────────────────────────────────────────────────────────────
-LOG_FILE = str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent / 'data'))) / 'trading.log')
+LOG_FILE = str(Path(os.getenv('DATA_DIR', str(BOT_DIR.parent / 'data'))) / 'trading.log')
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,

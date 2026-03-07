@@ -40,6 +40,7 @@ PORT         = int(os.getenv('DASHBOARD_PORT', '5555'))
 BOT_SERVICE  = os.getenv('BOT_SERVICE', 'mybot')
 PAPER        = os.getenv('ALPACA_PAPER', '').lower() in ('1', 'true', 'yes')
 
+sys.path.insert(0, str(REPO_DIR))
 sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(REPO_DIR / 'engine'))
 

@@ -14,6 +14,7 @@ import zoneinfo
 BASE_DIR = Path(__file__).parent
 REPO_DIR = BASE_DIR.parent
 sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(REPO_DIR))
 
 import requests as _requests
 import alpaca_env

@@ -32,8 +32,9 @@ STOCKBOT_DIR = SCRIPT_DIR.parent
 OUTPUT_FILE = STOCKBOT_DIR / "scanner_signals.json"
 LOG_FILE = STOCKBOT_DIR.parent / "logs" / "scanners.log"
 
-# Add stockbot dir to path so we can import scanners as a module
+# Add stockbot dir + repo root to path so we can import scanners/modules
 sys.path.insert(0, str(STOCKBOT_DIR.parent))  # ~/shared/
+sys.path.insert(0, str(STOCKBOT_DIR.parent.parent))
 
 # ─── Env loading ──────────────────────────────────────────────────────────────
 

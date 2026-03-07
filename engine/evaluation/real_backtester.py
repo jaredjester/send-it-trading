@@ -5,6 +5,10 @@ NO pandas/numpy — pure Python only (Pi is RAM constrained).
 import os, json, math, logging, requests
 from datetime import datetime, timedelta
 from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
 
 import alpaca_env
 alpaca_env.bootstrap()

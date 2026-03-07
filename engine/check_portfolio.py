@@ -8,6 +8,11 @@ import json
 import os
 import requests
 from datetime import datetime
+from pathlib import Path
+import sys
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
 
 import alpaca_env
 alpaca_env.bootstrap()

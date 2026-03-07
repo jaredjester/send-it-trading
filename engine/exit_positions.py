@@ -4,10 +4,15 @@ Submits market orders against the LIVE Alpaca account.
 Orders queue for next market open (Monday) since market is closed.
 """
 import os
+import sys
+from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
 
 import alpaca_env
 alpaca_env.bootstrap()
