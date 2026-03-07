@@ -11,7 +11,7 @@ Contract selection:
   - Direction: bullish signal types → CALL; bearish → PUT
   - Expiration: 14–35 days out (enough time, not too much premium)
   - Strike: ATM or 1 strike OTM (best balance of premium vs probability)
-  - Liquidity filter: open_interest >= MIN_OI (avoid illiquid contracts)
+  - Liquidity filter: open_interest >= int(_cfg("options.min_open_interest", 10)) (avoid illiquid contracts)
   - Affordability filter: premium × 100 <= max_budget_per_contract
 
 Position management:
@@ -22,7 +22,7 @@ Position management:
 
 Fallback to stock: when
   - No active contracts found in expiry window
-  - All contracts illiquid (OI < MIN_OI)
+  - All contracts illiquid (OI < int(_cfg("options.min_open_interest", 10)))
   - Cheapest premium × 100 > max_budget_per_contract
   - API errors
 
@@ -43,6 +43,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 logger = logging.getLogger("options_trader")
+
+from core.dynamic_config import cfg as _cfg
 
 PLANS_FILE = Path(__file__).parent.parent / "state" / "options_plans.jsonl"
 
@@ -82,12 +84,11 @@ def _update_plan(plan_id: str, updates: dict):
 BASE_URL        = "https://api.alpaca.markets"
 DATA_URL        = "https://data.alpaca.markets"
 
-MIN_OI          = 10       # Minimum open interest for a contract to be considered
-MAX_PREMIUM     = 1.50     # Max premium per share ($1.50 → $150/contract max)
-MIN_EXPIRY_DAYS = 14       # Minimum days to expiration
-MAX_EXPIRY_DAYS = 35       # Maximum days to expiration
-STOP_LOSS_PCT   = -0.50    # Exit if position drops 50% of premium
-TAKE_PROFIT_PCT =  1.00    # Exit if position doubles
+# All options parameters loaded from cfg() → live_config.json
+# Defaults: options.max_premium=1.50, options.min_open_interest=10,
+#           options.min_expiry_days=14, options.max_expiry_days=35,
+#           options.stop_loss_pct=0.50, options.take_profit_pct=1.00,
+#           options.expiry_guard_days=3
 
 # Signal type → option direction
 BULLISH_SIGNALS = {
@@ -153,15 +154,15 @@ class OptionsTrader:
         if options_bp < 10:
             return self._no_trade(f"Insufficient options BP: ${options_bp:.2f}")
 
-        max_per_contract = min(budget, options_bp, MAX_PREMIUM * 100)
+        max_per_contract = min(budget, options_bp, _cfg("options.max_premium", 1.50) * 100)
 
         # Find best contract
         contract = self._find_best_contract(symbol, direction, max_per_contract)
         if not contract:
             return self._no_trade(
                 f"No affordable liquid {direction} contract found for {symbol} "
-                f"(budget=${max_per_contract:.0f}, min_OI={MIN_OI}, "
-                f"window={MIN_EXPIRY_DAYS}-{MAX_EXPIRY_DAYS}d)"
+                f"(budget=${max_per_contract:.0f}, min_OI={int(_cfg("options.min_open_interest", 10))}, "
+                f"window={int(_cfg("options.min_expiry_days", 14))}-{int(_cfg("options.max_expiry_days", 35))}d)"
             )
 
         contract_symbol = contract["symbol"]
@@ -183,8 +184,8 @@ class OptionsTrader:
             from datetime import datetime as _dt, timezone as _tz
             decoded = self._decode_option_symbol_local(contract_symbol)
             expiry_str = decoded.get("expiry", "") if decoded else ""
-            stop_price   = round(premium * STOP_LOSS_PCT * -1, 4)   # premium × 0.50 → exit price
-            target_price = round(premium * (1 + TAKE_PROFIT_PCT), 4) # premium × 2.0
+            stop_price   = round(premium * _cfg("options.stop_loss_pct", 0.50) * -1, 4)   # premium × 0.50 → exit price
+            target_price = round(premium * (1 + _cfg("options.take_profit_pct", 1.00)), 4) # premium × 2.0
             stop_dollar   = round(stop_price * 100, 2)
             target_dollar = round(target_price * 100, 2)
             plan = {
@@ -198,7 +199,7 @@ class OptionsTrader:
                 "target_price":    target_price,
                 "max_loss_dollars": stop_dollar,
                 "target_gain_dollars": target_dollar,
-                "risk_reward":     round(TAKE_PROFIT_PCT / abs(STOP_LOSS_PCT), 1),
+                "risk_reward":     round(_cfg("options.take_profit_pct", 1.00) / abs(_cfg("options.stop_loss_pct", 0.50)), 1),
                 "target_date":     expiry_str + "T16:00:00+00:00" if expiry_str else None,
                 "entry_ts":        _dt.now(_tz.utc).isoformat(),
                 "status":          "open",
@@ -270,11 +271,11 @@ class OptionsTrader:
 
             reason = None
 
-            if unrealized_plpc <= STOP_LOSS_PCT:
+            if unrealized_plpc <= -_cfg("options.stop_loss_pct", 0.50):
                 reason = f"stop loss hit ({unrealized_plpc:.0%})"
-            elif unrealized_plpc >= TAKE_PROFIT_PCT:
+            elif unrealized_plpc >= _cfg("options.take_profit_pct", 1.00):
                 reason = f"take profit hit ({unrealized_plpc:.0%})"
-            elif expiry and (expiry - datetime.now().date()).days <= 3:
+            elif expiry and (expiry - datetime.now().date()).days <= int(_cfg("options.expiry_guard_days", 3)):
                 reason = f"expiry guard (exp {expiry})"
 
             if reason:
@@ -321,15 +322,15 @@ class OptionsTrader:
     ) -> Optional[dict]:
         """
         Query Alpaca options chain and return the best contract:
-          - Within MIN_EXPIRY_DAYS to MAX_EXPIRY_DAYS
+          - Within int(_cfg("options.min_expiry_days", 14)) to int(_cfg("options.max_expiry_days", 35))
           - Affordable (close_price × 100 <= max_notional)
-          - Liquid (open_interest >= MIN_OI)
+          - Liquid (open_interest >= int(_cfg("options.min_open_interest", 10)))
           - Prefer highest open_interest (most liquid)
           - Prefer ATM/slightly OTM (avoid deep OTM)
         """
         now = datetime.now()
-        gte = (now + timedelta(days=MIN_EXPIRY_DAYS)).strftime("%Y-%m-%d")
-        lte = (now + timedelta(days=MAX_EXPIRY_DAYS)).strftime("%Y-%m-%d")
+        gte = (now + timedelta(days=int(_cfg("options.min_expiry_days", 14)))).strftime("%Y-%m-%d")
+        lte = (now + timedelta(days=int(_cfg("options.max_expiry_days", 35)))).strftime("%Y-%m-%d")
 
         try:
             r = requests.get(
@@ -375,7 +376,7 @@ class OptionsTrader:
                 continue
 
             # Liquidity check
-            if oi < MIN_OI:
+            if oi < int(_cfg("options.min_open_interest", 10)):
                 continue
 
             # ATM proximity score (prefer strikes within 20% of stock price)
@@ -397,7 +398,7 @@ class OptionsTrader:
         if not candidates:
             logger.debug(
                 f"No qualifying {direction} contracts for {symbol} "
-                f"after filters (budget=${max_notional:.0f}, OI>={MIN_OI})"
+                f"after filters (budget=${max_notional:.0f}, OI>={int(_cfg("options.min_open_interest", 10))})"
             )
             return None
 

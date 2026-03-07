@@ -59,12 +59,40 @@ DEFAULTS: dict = {
     ],
 
     # RL episode outputs — written by episode_bridge after each trading day.
-    # Orchestrator reads these to scale aggressiveness based on recent performance.
-    "rl_action":           "hold",   # Q-recommended action for this session
-    "rl_trade_multiplier":  1.0,     # scales MAX_TRADES_PER_CYCLE (0=no trades, 1.5=push)
-    "rl_size_multiplier":   1.0,     # scales max_position_pct
-    "rl_last_episode_return": 0.0,
-    "rl_updated_at":        None,
+    "rl_action":              "hold",
+    "rl_trade_multiplier":     1.0,
+    "rl_size_multiplier":      1.0,
+    "rl_last_episode_return":  0.0,
+    "rl_updated_at":           None,
+
+    # RL threshold bandit — structure of Thompson Sampling exploration
+    "rl_default_threshold":    45,
+    "rl_threshold_buckets":    [25, 30, 35, 40, 45, 50, 55, 60, 65, 70],
+
+    # Options contract filters (used by options_trader.py)
+    "options.max_premium":         1.50,   # max premium per share ($150/contract)
+    "options.min_open_interest":   10,     # minimum OI for liquidity
+    "options.min_expiry_days":     14,     # earliest expiry considered
+    "options.max_expiry_days":     35,     # latest expiry considered
+    "options.stop_loss_pct":       0.50,   # exit when position down this fraction
+    "options.take_profit_pct":     1.00,   # exit when position up this fraction (doubles)
+    "options.expiry_guard_days":   3,      # close any contract within N days of expiry
+
+    # Position sizing formula (tunable by overnight_optimizer)
+    "min_position_pct":       0.04,   # base position size
+    "position_scale_factor":  0.06,   # how much position grows per score unit above threshold
+    "position_floor_pct":     0.02,   # absolute minimum position fraction
+
+    # Finviz scanner (initial signal scores before alpha engine re-scores)
+    "finviz.max_per_screen":       8,
+    "finviz.multi_screen_boost":   3,
+    "finviz.score_momentum":      66,
+    "finviz.score_oversold":      64,
+    "finviz.score_breakout":      67,
+    "finviz.score_insider":       65,
+    "finviz.score_preearnings":   70,
+    "finviz.score_postearnings":  69,
+    "finviz.score_relstrength":   66,
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

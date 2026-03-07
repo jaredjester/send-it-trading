@@ -532,8 +532,10 @@ class SimpleOrchestrator:
 
         # Base: 4% to max_pos% scaled by how far above threshold
         score_range = max(score - threshold, 0)
-        raw_pct = 0.04 + score_range / 100 * 0.06
-        raw_pct = max(0.04, min(raw_pct, max_pos))
+        base_pct   = cfg("min_position_pct")
+        scale      = cfg("position_scale_factor")
+        raw_pct    = base_pct + score_range / 100 * scale
+        raw_pct    = max(base_pct, min(raw_pct, max_pos))
 
         # Sharpe haircut + RL size multiplier
         adjusted_pct = raw_pct * haircut * rl_size
@@ -543,7 +545,7 @@ class SimpleOrchestrator:
         final_pct = adjusted_pct * ic_mult
 
         # Hard ceiling at max_pos regardless of multipliers
-        final_pct = max(0.02, min(final_pct, max_pos))
+        final_pct = max(cfg("position_floor_pct"), min(final_pct, max_pos))
         notional = portfolio["portfolio_value"] * final_pct
 
         logger.debug(

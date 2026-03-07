@@ -21,19 +21,31 @@ from typing import List, Dict
 
 logger = logging.getLogger("finviz_scanner")
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.dynamic_config import cfg as _cfg
+
 # Base scores — overridden by alpha engine but used as floor on failure
-SCREEN_BASE_SCORES = {
-    "finviz_momentum":        66,
-    "finviz_oversold":        64,
-    "finviz_breakout":        67,
-    "finviz_insider":         65,
-    "finviz_preearnings":     70,   # Highest — known catalyst coming
-    "finviz_postearnings":    69,   # High — confirmed beat + drift
-    "finviz_relstrength":     66,   # Up on red day = institutional buying
-}
+def _screen_score(name: str) -> int:
+    """Base score for a screen type — loaded from cfg so optimizer can tune."""
+    key_map = {
+        "finviz_momentum":    "finviz.score_momentum",
+        "finviz_oversold":    "finviz.score_oversold",
+        "finviz_breakout":    "finviz.score_breakout",
+        "finviz_insider":     "finviz.score_insider",
+        "finviz_preearnings": "finviz.score_preearnings",
+        "finviz_postearnings":"finviz.score_postearnings",
+        "finviz_relstrength": "finviz.score_relstrength",
+    }
+    defaults = {
+        "finviz_momentum": 66, "finviz_oversold": 64, "finviz_breakout": 67,
+        "finviz_insider": 65, "finviz_preearnings": 70,
+        "finviz_postearnings": 69, "finviz_relstrength": 66,
+    }
+    return int(_cfg(key_map.get(name, ""), defaults.get(name, 60)))
 
 # Max candidates per screen
-MAX_PER_SCREEN = 8
+# max_per_screen loaded from cfg("finviz.max_per_screen") at call time
 MAX_TOTAL = 25  # Raised slightly to accommodate earnings plays
 
 
@@ -61,13 +73,13 @@ def _screen_momentum() -> List[Dict]:
     })
     df = ft.screener_view()
     results = []
-    for _, row in df.head(MAX_PER_SCREEN).iterrows():
+    for _, row in df.head(int(_cfg("finviz.max_per_screen", 8))).iterrows():
         sym = str(row.get("Ticker", "")).strip()
         if not sym:
             continue
         results.append({
             "symbol": sym,
-            "score": SCREEN_BASE_SCORES["finviz_momentum"],
+            "score": _screen_score("finviz_momentum"),
             "type": "finviz_momentum",
             "reason": f"RelVol>2x, above SMA20, RSI neutral",
         })
@@ -94,7 +106,7 @@ def _screen_oversold() -> List[Dict]:
                 "Price":                            "Over $2",
             })
             df = ft.screener_view()
-            for _, row in df.head(MAX_PER_SCREEN // 2).iterrows():
+            for _, row in df.head(int(_cfg("finviz.max_per_screen", 8)) // 2).iterrows():
                 sym = str(row.get("Ticker", "")).strip()
                 if not sym:
                     continue
@@ -109,13 +121,13 @@ def _screen_oversold() -> List[Dict]:
     return results
     df = ft.screener_view()
     results = []
-    for _, row in df.head(MAX_PER_SCREEN).iterrows():
+    for _, row in df.head(int(_cfg("finviz.max_per_screen", 8))).iterrows():
         sym = str(row.get("Ticker", "")).strip()
         if not sym:
             continue
         results.append({
             "symbol": sym,
-            "score": SCREEN_BASE_SCORES["finviz_oversold"],
+            "score": _screen_score("finviz_oversold"),
             "type": "finviz_oversold",
             "reason": "RSI oversold, above SMA200 (bounce)",
         })
@@ -141,13 +153,13 @@ def _screen_breakout() -> List[Dict]:
                 "Price":            "Over $5",
             })
             df = ft.screener_view()
-            for _, row in df.head(MAX_PER_SCREEN // 2).iterrows():
+            for _, row in df.head(int(_cfg("finviz.max_per_screen", 8)) // 2).iterrows():
                 sym = str(row.get("Ticker", "")).strip()
                 if not sym:
                     continue
                 results.append({
                     "symbol": sym,
-                    "score":  SCREEN_BASE_SCORES["finviz_breakout"],
+                    "score":  _screen_score("finviz_breakout"),
                     "type":   "finviz_breakout",
                     "reason": f"Breakout: {label}",
                 })
@@ -180,11 +192,11 @@ def _screen_insider_buying() -> List[Dict]:
         relationship = row.get("Relationship", "")
         results.append({
             "symbol": sym,
-            "score": SCREEN_BASE_SCORES["finviz_insider"],
+            "score": _screen_score("finviz_insider"),
             "type": "finviz_insider",
             "reason": f"Insider buy: {owner} ({relationship})",
         })
-        if len(results) >= MAX_PER_SCREEN:
+        if len(results) >= int(_cfg("finviz.max_per_screen", 8)):
             break
     return results
 
@@ -206,7 +218,7 @@ def _screen_relative_strength() -> List[Dict]:
         })
         df = fp.screener_view()
         results = []
-        for _, row in df.head(MAX_PER_SCREEN).iterrows():
+        for _, row in df.head(int(_cfg("finviz.max_per_screen", 8))).iterrows():
             sym = str(row.get("Ticker", "")).strip()
             if not sym:
                 continue
@@ -252,13 +264,13 @@ def _screen_preearnings() -> List[Dict]:
             })
             # Note: using "Not Overbought (<60)" — the only valid RSI range filter
             df = ft.screener_view()
-            for _, row in df.head(MAX_PER_SCREEN).iterrows():
+            for _, row in df.head(int(_cfg("finviz.max_per_screen", 8))).iterrows():
                 sym = str(row.get("Ticker", "")).strip()
                 if not sym:
                     continue
                 results.append({
                     "symbol": sym,
-                    "score":  SCREEN_BASE_SCORES["finviz_preearnings"],
+                    "score":  _screen_score("finviz_preearnings"),
                     "type":   "finviz_preearnings",
                     "reason": f"Earnings {label}, above SMA20, RSI neutral, rel vol up",
                 })
@@ -297,13 +309,13 @@ def _screen_postearnings_drift() -> List[Dict]:
                 "Price":                        "Over $3",
             })
             df = ft.screener_view()
-            for _, row in df.head(MAX_PER_SCREEN).iterrows():
+            for _, row in df.head(int(_cfg("finviz.max_per_screen", 8))).iterrows():
                 sym = str(row.get("Ticker", "")).strip()
                 if not sym:
                     continue
                 results.append({
                     "symbol": sym,
-                    "score":  SCREEN_BASE_SCORES["finviz_postearnings"],
+                    "score":  _screen_score("finviz_postearnings"),
                     "type":   "finviz_postearnings",
                     "reason": f"PEAD: {label}, above SMA20, RSI building",
                 })
@@ -342,7 +354,7 @@ def run_finviz_scan() -> List[Dict]:
             if sym in symbol_scores:
                 # Symbol appeared in multiple screens — boost score
                 existing = symbol_scores[sym]
-                existing["score"] = min(existing["score"] + 3, 80)
+                existing["score"] = min(existing["score"] + int(_cfg("finviz.multi_screen_boost", 3)), 80)
                 existing["reason"] += f" + {name}"
             else:
                 symbol_scores[sym] = h.copy()

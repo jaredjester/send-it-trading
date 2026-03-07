@@ -39,11 +39,18 @@ from typing import Optional
 
 logger = logging.getLogger("rl.threshold_learner")
 
-THRESHOLD_BUCKETS = [25, 30, 35, 40, 45, 50, 55, 60, 65, 70]
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core.dynamic_config import cfg as _cfg
+
 REGIMES = ["bull", "bear", "neutral", "unknown"]
 
-# Conservative default when we have no data yet
-DEFAULT_THRESHOLD = 45
+# Buckets and default loaded from cfg so they can be tuned
+def _buckets() -> list:
+    return _cfg("rl_threshold_buckets", [25, 30, 35, 40, 45, 50, 55, 60, 65, 70])
+
+def _default_threshold() -> int:
+    return int(_cfg("rl_default_threshold", 45))
 
 STATE_FILE = Path(__file__).parent.parent / "evaluation" / "threshold_bandit.json"
 
@@ -141,7 +148,7 @@ class ThresholdLearner:
         # Count total trades for this regime (for epsilon decay)
         total_regime_trades = sum(
             self._get_entry(regime, t)["trades"]
-            for t in THRESHOLD_BUCKETS
+            for t in _buckets()
         )
 
         # Epsilon decays from 0.30 → 0.05 as we accumulate regime data
@@ -149,7 +156,7 @@ class ThresholdLearner:
 
         # ε-greedy: sometimes explore a random bucket
         if random.random() < epsilon:
-            chosen = random.choice(THRESHOLD_BUCKETS)
+            chosen = random.choice(_buckets())
             logger.info(
                 f"ThresholdLearner [{regime}]: EXPLORE → {chosen} "
                 f"(ε={epsilon:.2f}, regime_trades={total_regime_trades})"
@@ -157,7 +164,7 @@ class ThresholdLearner:
         else:
             # Thompson sampling: draw from each Beta, pick max
             samples = {}
-            for t in THRESHOLD_BUCKETS:
+            for t in _buckets():
                 entry = self._get_entry(regime, t)
                 a, b = entry["alpha"], entry["beta"]
                 try:
@@ -238,12 +245,12 @@ class ThresholdLearner:
         """
         Return the threshold with the highest estimated win rate (Beta mean)
         for the given regime, using only buckets with at least 3 real trades.
-        Falls back to DEFAULT_THRESHOLD if insufficient data.
+        Falls back to _default_threshold() if insufficient data.
         """
-        best_t = DEFAULT_THRESHOLD
+        best_t = _default_threshold()
         best_rate = -1.0
 
-        for t in THRESHOLD_BUCKETS:
+        for t in _buckets():
             entry = self._get_entry(regime, t)
             if entry["trades"] >= 3:
                 a, b = entry["alpha"], entry["beta"]
@@ -255,7 +262,7 @@ class ThresholdLearner:
         if best_rate < 0:
             logger.debug(
                 f"ThresholdLearner: not enough data for [{regime}], "
-                f"using default {DEFAULT_THRESHOLD}"
+                f"using default {_default_threshold()}"
             )
         else:
             logger.debug(
@@ -293,7 +300,7 @@ class ThresholdLearner:
         lines.append(f"  {'Thresh':>6} | {'Win Rate':>8} | {'Trades':>6} | {'Total PnL':>9} | Confidence")
         lines.append(f"  {'-'*6}-+-{'-'*8}-+-{'-'*6}-+-{'-'*9}-+-{'-'*20}")
 
-        for t in THRESHOLD_BUCKETS:
+        for t in _buckets():
             entry = self._get_entry(regime, t)
             a, b = entry["alpha"], entry["beta"]
             rate = a / (a + b)
