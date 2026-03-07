@@ -25,9 +25,9 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent          # engine/evolution/
 REPO_DIR = BASE_DIR.parent.parent                   # repo root
 
-WORKERS_DIR   = REPO_DIR / 'evolution' / 'workers'
+WORKERS_DIR   = Path(os.getenv('WORKERS_DIR',  str(REPO_DIR / 'evolution' / 'workers')))
 RESULTS_DIR   = REPO_DIR / 'evolution' / 'results'
-LIVE_CFG      = REPO_DIR / 'engine' / 'evaluation' / 'live_config.json'
+LIVE_CFG      = Path(os.getenv('EVAL_DIR', str(REPO_DIR / 'engine' / 'evaluation'))) / 'live_config.json'
 CHAMPION_FILE = REPO_DIR / 'evolution' / 'champion.json'
 
 WINDOW_DAYS   = 30   # out-of-sample evaluation window

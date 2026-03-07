@@ -18,6 +18,21 @@ sys.path.insert(0, str(BASE_DIR))
 import requests as _requests
 from orchestrator_simple import SimpleOrchestrator
 
+def _apply_config_override():
+    """Apply CONFIG_OVERRIDE env var (JSON) to this worker's live_config.json at startup."""
+    import json, os
+    override_str = os.getenv("CONFIG_OVERRIDE", "").strip()
+    if not override_str:
+        return
+    try:
+        overrides = json.loads(override_str)
+        from core.dynamic_config import cfg_update
+        cfg_update(overrides)
+        worker_id = os.getenv("WORKER_ID", "unknown")
+        print(f"[{worker_id}] CONFIG_OVERRIDE applied: {list(overrides.keys())}")
+    except Exception as e:
+        print(f"CONFIG_OVERRIDE parse failed (non-fatal): {e}")
+
 _TG_TOKEN = "7789884565:AAFm8-xf3zffBKvMJCen3U1B4h7Ph5UMdBU"
 _TG_CHAT  = "-1002553012880"  # stockbot group channel
 
@@ -206,6 +221,8 @@ def main():
         logger.error(f"Fatal: {e}", exc_info=True)
         sys.exit(1)
 
+
+_apply_config_override()
 
 if __name__ == '__main__':
     main()

@@ -22,7 +22,8 @@ from typing import Any
 
 logger = logging.getLogger("dynamic_config")
 
-_CONFIG_PATH = Path(__file__).parent.parent / "evaluation" / "live_config.json"
+import os as _os
+_CONFIG_PATH = Path(_os.getenv("EVAL_DIR", str(Path(__file__).parent.parent / "evaluation"))) / "live_config.json"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DEFAULTS — used when a key is absent from live_config.json

@@ -1,9 +1,11 @@
 services:
 
   # ── Intelligence Bot ─────────────────────────────────────────────────────
-  # Runs news/insider/polymarket/gamma scanners. Writes to shared data/.
-  # All engine workers read from this shared intel.
+  # NOTE: In production, send-it-bot.service (systemd) runs this.
+  # Use profile "full" for a clean Docker-only deployment on a new machine.
+  # Default (docker compose up) only starts paper workers + optimizer.
   bot:
+    profiles: ["full"]
     build: .
     command: python bot/main.py
     env_file: .env
@@ -13,23 +15,25 @@ services:
     restart: unless-stopped
 
   # ── Live Dashboard ───────────────────────────────────────────────────────
+  # NOTE: In production, send-it-dashboard.service (systemd) runs this on :5555.
   dashboard:
+    profiles: ["full"]
     build: .
     command: python dashboard/api.py
     env_file: .env
     ports:
-      - "5555:5555"
+      - "5556:5555"   # use 5556 to avoid conflict with systemd on 5555
     volumes:
       - ./data:/app/data
       - ./state:/app/state
       - ./logs:/app/logs
-      - ./evolution/results:/app/evolution/results
-    depends_on: [bot]
+      - ./evolution:/app/evolution
     restart: unless-stopped
 
   # ── Live Engine (champion config) ────────────────────────────────────────
-  # Runs with the current champion params. Paper=false. Real money.
+  # NOTE: In production, send-it-engine.service (systemd) runs this.
   engine-live:
+    profiles: ["full"]
     build: .
     command: python engine/main_wrapper_simple.py
     env_file: .env
@@ -39,14 +43,15 @@ services:
       CONFIG_OVERRIDE: ""
     volumes:
       - ./data:/app/data
-      - ./state:/app/state
-      - ./logs/live:/app/logs
-    depends_on: [bot]
+      - ./state:/app/engine/state
+      - ./engine/evaluation:/app/engine/evaluation
+      - ./logs/live:/app/engine/logs
     restart: unless-stopped
 
-  # ── Evolution Workers (paper trading, parallel param search) ─────────────
-  # Each worker runs with a different param set in paper mode.
-  # The optimizer picks the best one weekly and promotes it to live config.
+  # ── Evolution Workers ────────────────────────────────────────────────────
+  # Paper trading workers, each with different parameter sets.
+  # Optimizer picks the best weekly and promotes to live engine config.
+  # These START BY DEFAULT (no profile) — run alongside systemd services.
 
   worker-aggressive:
     build: .
@@ -55,19 +60,16 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "aggressive"
-      CONFIG_OVERRIDE: |
-        {
-          "momentum.score_weight": 0.70,
-          "mean_reversion.score_weight": 0.20,
-          "sentiment.score_weight": 0.10,
-          "options.max_premium": 2.00,
-          "options.stop_loss_pct": 0.60,
-          "min_score_threshold": 38
-        }
+      EVAL_DIR: /app/evolution/workers/aggressive/eval
+      CONFIG_OVERRIDE: >
+        {"momentum.score_weight": 0.70, "mean_reversion.score_weight": 0.20,
+         "sentiment.score_weight": 0.10, "options.max_premium": 2.00,
+         "options.stop_loss_pct": 0.60, "min_score_threshold": 38}
     volumes:
       - ./data:/app/data
-      - ./evolution/workers/aggressive/state:/app/state
-      - ./evolution/workers/aggressive/logs:/app/logs
+      - ./evolution/workers/aggressive/state:/app/engine/state
+      - ./evolution/workers/aggressive/eval:/app/evolution/workers/aggressive/eval
+      - ./evolution/workers/aggressive/logs:/app/engine/logs
     restart: unless-stopped
 
   worker-balanced:
@@ -77,19 +79,16 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "balanced"
-      CONFIG_OVERRIDE: |
-        {
-          "momentum.score_weight": 0.55,
-          "mean_reversion.score_weight": 0.35,
-          "sentiment.score_weight": 0.20,
-          "options.max_premium": 1.50,
-          "options.stop_loss_pct": 0.50,
-          "min_score_threshold": 45
-        }
+      EVAL_DIR: /app/evolution/workers/balanced/eval
+      CONFIG_OVERRIDE: >
+        {"momentum.score_weight": 0.55, "mean_reversion.score_weight": 0.35,
+         "sentiment.score_weight": 0.20, "options.max_premium": 1.50,
+         "options.stop_loss_pct": 0.50, "min_score_threshold": 45}
     volumes:
       - ./data:/app/data
-      - ./evolution/workers/balanced/state:/app/state
-      - ./evolution/workers/balanced/logs:/app/logs
+      - ./evolution/workers/balanced/state:/app/engine/state
+      - ./evolution/workers/balanced/eval:/app/evolution/workers/balanced/eval
+      - ./evolution/workers/balanced/logs:/app/engine/logs
     restart: unless-stopped
 
   worker-conservative:
@@ -99,19 +98,16 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "conservative"
-      CONFIG_OVERRIDE: |
-        {
-          "momentum.score_weight": 0.40,
-          "mean_reversion.score_weight": 0.40,
-          "sentiment.score_weight": 0.20,
-          "options.max_premium": 1.00,
-          "options.stop_loss_pct": 0.40,
-          "min_score_threshold": 55
-        }
+      EVAL_DIR: /app/evolution/workers/conservative/eval
+      CONFIG_OVERRIDE: >
+        {"momentum.score_weight": 0.40, "mean_reversion.score_weight": 0.40,
+         "sentiment.score_weight": 0.20, "options.max_premium": 1.00,
+         "options.stop_loss_pct": 0.40, "min_score_threshold": 55}
     volumes:
       - ./data:/app/data
-      - ./evolution/workers/conservative/state:/app/state
-      - ./evolution/workers/conservative/logs:/app/logs
+      - ./evolution/workers/conservative/state:/app/engine/state
+      - ./evolution/workers/conservative/eval:/app/evolution/workers/conservative/eval
+      - ./evolution/workers/conservative/logs:/app/engine/logs
     restart: unless-stopped
 
   worker-momentum:
@@ -121,31 +117,32 @@ services:
     environment:
       ALPACA_PAPER: "true"
       WORKER_ID: "momentum"
-      CONFIG_OVERRIDE: |
-        {
-          "momentum.score_weight": 0.80,
-          "mean_reversion.score_weight": 0.10,
-          "sentiment.score_weight": 0.10,
-          "options.max_premium": 2.00,
-          "options.stop_loss_pct": 0.55,
-          "min_score_threshold": 40
-        }
+      EVAL_DIR: /app/evolution/workers/momentum/eval
+      CONFIG_OVERRIDE: >
+        {"momentum.score_weight": 0.80, "mean_reversion.score_weight": 0.10,
+         "sentiment.score_weight": 0.10, "options.max_premium": 2.00,
+         "options.stop_loss_pct": 0.55, "min_score_threshold": 40}
     volumes:
       - ./data:/app/data
-      - ./evolution/workers/momentum/state:/app/state
-      - ./evolution/workers/momentum/logs:/app/logs
+      - ./evolution/workers/momentum/state:/app/engine/state
+      - ./evolution/workers/momentum/eval:/app/evolution/workers/momentum/eval
+      - ./evolution/workers/momentum/logs:/app/engine/logs
     restart: unless-stopped
 
   # ── Walk-Forward Optimizer ───────────────────────────────────────────────
-  # Runs weekly (cron inside container). Compares worker Sharpe ratios on
-  # the last 30-day out-of-sample window. Promotes the winner to live config.
+  # Runs in daemon mode. Every Sunday 4 AM ET:
+  #   1. Reads 30-day Sharpe/Sortino/WR from each worker's trade log
+  #   2. Picks the winner
+  #   3. Writes winner params to engine/evaluation/live_config.json (systemd live engine)
   optimizer:
     build: .
     command: python engine/evolution/optimizer.py --daemon
     env_file: .env
+    environment:
+      EVAL_DIR: /app/engine/evaluation       # writes champion to live engine config
+      WORKERS_DIR: /app/evolution/workers    # reads worker results from here
     volumes:
       - ./data:/app/data
-      - ./state:/app/state
-      - ./evolution:/app/evolution
-    depends_on: [worker-aggressive, worker-balanced, worker-conservative, worker-momentum]
+      - ./engine/evaluation:/app/engine/evaluation    # promotes winner to live
+      - ./evolution:/app/evolution                    # reads all worker results
     restart: unless-stopped
