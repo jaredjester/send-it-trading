@@ -33,7 +33,7 @@ try:
     _online_learner = _OL()
 except Exception as _e:
     import logging as _log
-    _log.getLogger('orchestrator_simple').warning('OnlineLearner unavailable: %s', _e)
+    _log.getLogger('orchestrator').warning('OnlineLearner unavailable: %s', _e)
     _online_learner = None
 from rl.episode_bridge import EpisodeBridge
 from core.options_trader import OptionsTrader
@@ -45,7 +45,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-logger = logging.getLogger("orchestrator_simple")
+logger = logging.getLogger("orchestrator")
 
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────────

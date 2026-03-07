@@ -1,14 +1,14 @@
 # engine/
 
-Strategy V2 options-first execution engine. Runs every 30 minutes via `main_wrapper_simple.py`.
+Strategy V2 options-first execution engine. Runs every 30 minutes via `main_wrapper.py`.
 
 ---
 
 ## Entry Point
 
 ```
-main_wrapper_simple.py
-  └── orchestrator_simple.py (SimpleOrchestrator)
+main_wrapper.py
+  └── orchestrator.py (SimpleOrchestrator)
         ├── Loads: scanner signals + bot intel from data/
         ├── Scores: each candidate via alpha_engine.py
         ├── Filters: IC-weak signals via rl/online_learner.py

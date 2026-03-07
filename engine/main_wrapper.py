@@ -20,7 +20,7 @@ sys.path.insert(0, str(REPO_DIR))
 import requests as _requests
 import alpaca_env
 alpaca_env.bootstrap()
-from orchestrator_simple import SimpleOrchestrator
+from orchestrator import SimpleOrchestrator
 
 _TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 _TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")  # stockbot group channel

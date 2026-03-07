@@ -86,7 +86,7 @@ Type=simple
 User=$USERNAME
 WorkingDirectory=$REPO_DIR
 ExecStartPre=/bin/sleep 15
-ExecStart=$REPO_DIR/venv/bin/python $REPO_DIR/engine/main_wrapper_simple.py
+ExecStart=$REPO_DIR/venv/bin/python $REPO_DIR/engine/main_wrapper.py
 Restart=always
 RestartSec=10
 EnvironmentFile=$REPO_DIR/.env
@@ -137,7 +137,7 @@ echo "     sudo systemctl enable --now send-it-bot send-it-engine send-it-dashbo
 echo ""
 echo "  3. Or run manually:"
 echo "     ./venv/bin/python bot/main.py &"
-echo "     ./venv/bin/python engine/main_wrapper_simple.py &"
+echo "     ./venv/bin/python engine/main_wrapper.py &"
 echo "     ./venv/bin/python dashboard/api.py"
 echo ""
 echo "  Dashboard: http://localhost:5555"

@@ -4,8 +4,8 @@ The core trading engine that orchestrates all trading activities.
 
 ## Structure
 
-- `main_wrapper_simple.py`: Simplified main wrapper
-- `orchestrator_simple.py`: Trading orchestration logic
+- `main_wrapper.py`: Simplified main wrapper
+- `orchestrator.py`: Trading orchestration logic
 - `core/`: Core components (Alpaca client, config, sizing, etc.)
 - `data_sources/`: External data aggregators
 - `evaluation/`: Backtesting and performance evaluation
@@ -24,5 +24,5 @@ The core trading engine that orchestrates all trading activities.
 ## Running the Engine
 
 ```bash
-python engine/orchestrator_simple.py
+python engine/orchestrator.py
 ```

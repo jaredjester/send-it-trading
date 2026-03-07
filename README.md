@@ -23,7 +23,7 @@ data/*.json                 options-first trades             :5555
 | Service | File | Runs every |
 |---------|------|-----------|
 | `send-it-bot` | `bot/main.py` | 11 min |
-| `send-it-engine` | `engine/main_wrapper_simple.py` | 30 min |
+| `send-it-engine` | `engine/main_wrapper.py` | 30 min |
 | `send-it-dashboard` | `dashboard/api.py` | continuous (Flask) |
 
 ---
@@ -49,8 +49,8 @@ send-it-trading/
 │       └── ...                     pricing, risk, calendar, opportunity_cost
 │
 ├── engine/                     ENGINE service
-│   ├── main_wrapper_simple.py    Entry point (market-hours loop, Telegram reports)
-│   ├── orchestrator_simple.py    Master decision loop:
+│   ├── main_wrapper.py    Entry point (market-hours loop, Telegram reports)
+│   ├── orchestrator.py    Master decision loop:
 │   │                               1. Load scanner signals + bot intel
 │   │                               2. Score each candidate via alpha_engine
 │   │                               3. IC-filter weak signals
@@ -215,8 +215,8 @@ Dashboard: `http://localhost:5555`
 | File | Owns / Writes |
 |------|--------------|
 | `bot/main.py` | `data/*.json` intel files |
-| `engine/orchestrator_simple.py` | `engine/state/trade_memory.jsonl`, `engine/state/options_plans.jsonl`, `engine/state/latest_signals.json` |
-| `engine/main_wrapper_simple.py` | `engine/state/market_open_plan.json`, Telegram messages |
+| `engine/orchestrator.py` | `engine/state/trade_memory.jsonl`, `engine/state/options_plans.jsonl`, `engine/state/latest_signals.json` |
+| `engine/main_wrapper.py` | `engine/state/market_open_plan.json`, Telegram messages |
 | `engine/core/options_trader.py` | `engine/state/options_plans.jsonl` |
 | `bot/options_v1/trade_planner.py` | `data/bot_trade_plans.jsonl` |
 | `engine/evaluation/overnight_optimizer.py` | `engine/evaluation/live_config.json` |

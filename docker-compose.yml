@@ -35,7 +35,7 @@ services:
   engine-live:
     profiles: ["full"]
     build: .
-    command: python engine/main_wrapper_simple.py
+    command: python engine/main_wrapper.py
     env_file: .env
     environment:
       ALPACA_MODE: "live"
@@ -54,7 +54,7 @@ services:
 
   worker-aggressive:
     build: .
-    command: python engine/main_wrapper_simple.py
+    command: python engine/main_wrapper.py
     env_file: .env
     environment:
       ALPACA_MODE: "paper"
@@ -69,7 +69,7 @@ services:
 
   worker-balanced:
     build: .
-    command: python engine/main_wrapper_simple.py
+    command: python engine/main_wrapper.py
     env_file: .env
     environment:
       ALPACA_MODE: "paper"
@@ -84,7 +84,7 @@ services:
 
   worker-conservative:
     build: .
-    command: python engine/main_wrapper_simple.py
+    command: python engine/main_wrapper.py
     env_file: .env
     environment:
       ALPACA_MODE: "paper"
@@ -99,7 +99,7 @@ services:
 
   worker-momentum:
     build: .
-    command: python engine/main_wrapper_simple.py
+    command: python engine/main_wrapper.py
     env_file: .env
     environment:
       ALPACA_MODE: "paper"

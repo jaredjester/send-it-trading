@@ -19,4 +19,4 @@ COPY . .
 RUN mkdir -p data engine/state engine/logs evolution
 
 # Default: run the engine. Override CMD in docker-compose per service.
-CMD ["python", "engine/main_wrapper_simple.py"]
+CMD ["python", "engine/main_wrapper.py"]

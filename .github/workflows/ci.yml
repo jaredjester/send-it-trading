@@ -168,7 +168,7 @@ jobs:
           # Only check the hot execution path — not CLI/data_source scripts
           # data_sources/, scanners/ __main__ blocks, and evaluation/ CLI tools
           # intentionally use print() for human-readable output when run directly
-          CORE_FILES="engine/orchestrator_simple.py engine/main_wrapper_simple.py engine/alpha_engine.py"
+          CORE_FILES="engine/orchestrator.py engine/main_wrapper.py engine/alpha_engine.py"
           CORE_DIRS="engine/core engine/rl"
 
           HITS=""

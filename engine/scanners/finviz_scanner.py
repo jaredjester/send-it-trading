@@ -331,7 +331,7 @@ def run_finviz_scan() -> List[Dict]:
     Symbols in multiple screens get score boost.
     Writes results to state/latest_signals.json for the options bot to read.
 
-    Returns: list of opportunity dicts for orchestrator_simple.py
+    Returns: list of opportunity dicts for orchestrator.py
     """
     results: List[Dict] = []
     symbol_scores: Dict[str, Dict] = {}
