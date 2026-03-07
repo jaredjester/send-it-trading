@@ -23,6 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent
 REPO_DIR = BASE_DIR.parent
 load_dotenv(BASE_DIR / '.env')
 
+sys.path.insert(0, str(REPO_DIR))
+sys.path.insert(0, str(BASE_DIR))
+sys.path.insert(0, str(REPO_DIR / 'engine'))
+
 import alpaca_env
 alpaca_env.bootstrap()
 
@@ -43,10 +47,6 @@ PAPER        = os.getenv('ALPACA_PAPER', '').lower() in ('1', 'true', 'yes')
 COMPOSE_PROJECT = os.getenv('COMPOSE_PROJECT_NAME', 'send-it-trading')
 MONITORED_SERVICES = [s.strip() for s in os.getenv('DASHBOARD_SERVICES', 'send-it-bot,send-it-engine,send-it-dashboard').split(',') if s.strip()]
 DEFAULT_LOG_LINES = int(os.getenv('DASHBOARD_LOG_LINES', '60'))
-
-sys.path.insert(0, str(REPO_DIR))
-sys.path.insert(0, str(BASE_DIR))
-sys.path.insert(0, str(REPO_DIR / 'engine'))
 
 # ─── Data File Paths (all relative) ─────────────────────────────────────────
 NEWS_INTEL    = DATA_DIR / 'news_intel.json'
