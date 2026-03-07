@@ -457,8 +457,19 @@ class SimpleOrchestrator:
                     _gf = _dd / 'gex_cache.json'
                     if _gf.exists():
                         _gd = _ji.loads(_gf.read_text()).get(symbol, {})
-                        if _gd.get('squeeze_active'):               _intel_boost += 15
-                        elif _gd.get('gex_regime') == 'positive_gamma': _intel_boost += 5
+                        # GEX squeeze
+                        _sq = float(_gd.get('squeeze_score', 0))
+                        if _gd.get('squeeze_active') or _sq > 65:  _intel_boost += 15
+                        elif _sq > 40:                              _intel_boost += 8
+                        elif _gd.get('regime') == 'positive_gamma': _intel_boost += 5
+                        # VEX: positive vanna = dealers buy on IV drops = bullish
+                        _vex = float(_gd.get('vex_bn', 0))
+                        if _vex > 1.0:   _intel_boost += 8
+                        elif _vex < -1.0: _intel_boost -= 5
+                        # Dealer pressure composite (GEX+VEX+CEX combined)
+                        _dp = float(_gd.get('dealer_pressure', 0))
+                        if _dp > 20:    _intel_boost += 6
+                        elif _dp < -10: _intel_boost -= 4
                     _pf = _dd / 'polymarket_intel.json'
                     if _pf.exists():
                         for _m in _ji.loads(_pf.read_text()).get('by_symbol', {}).get(symbol, [])[:2]:

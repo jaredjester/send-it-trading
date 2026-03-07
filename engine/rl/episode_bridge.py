@@ -41,7 +41,7 @@ from typing import Optional
 logger = logging.getLogger("rl.episode_bridge")
 
 # Point to adaptive/ directory so we can import its modules
-_ADAPTIVE_DIR = Path(__file__).parent.parent.parent / "adaptive"
+_ADAPTIVE_DIR = Path(__file__).parent.parent / "adaptive"  # engine/adaptive/
 _STRATEGY_DIR = Path(__file__).parent.parent
 
 # Multipliers applied to config params based on Q-recommended action
