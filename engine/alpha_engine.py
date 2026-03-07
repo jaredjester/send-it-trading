@@ -21,6 +21,8 @@ import requests
 
 from core.dynamic_config import cfg as _cfg
 
+logger = logging.getLogger('alpha_engine')
+
 
 class AlphaEngine:
     """
@@ -121,15 +123,15 @@ class AlphaEngine:
                 self.bar_cache[cache_key] = bars
                 self.cache_timestamps[cache_key] = now
                 
-                self.logger.info(f"Fetched {len(bars)} bars for {symbol}")
+                logger.info(f"Fetched {len(bars)} bars for {symbol}")
                 return bars
             
             except Exception as e:
-                self.logger.warning(f"Attempt {attempt + 1} failed for {symbol}: {e}")
+                logger.warning(f"Attempt {attempt + 1} failed for {symbol}: {e}")
                 if attempt < self.config['data']['retry_attempts'] - 1:
                     time.sleep(self.config['data']['retry_delay_seconds'])
                 else:
-                    self.logger.error(f"Failed to fetch bars for {symbol} after all retries")
+                    logger.error(f"Failed to fetch bars for {symbol} after all retries")
                     return []
         
         return []

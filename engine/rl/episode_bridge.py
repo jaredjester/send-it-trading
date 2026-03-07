@@ -2,7 +2,7 @@
 """
 Episode Bridge — wires orchestrator trade events into the Thompson Sampling RL threshold learner.
 
-The existing adaptive/ system (EpisodeManager + QLearner) was built but never
+The Thompson Sampling threshold learner was built and
 connected to the orchestrator. This bridge is the missing wire.
 
 Episode lifecycle (one trading day = one episode):
@@ -41,7 +41,6 @@ from typing import Optional
 logger = logging.getLogger("rl.episode_bridge")
 
 # Point to adaptive/ directory so we can import its modules
-_ADAPTIVE_DIR = Path(__file__).parent.parent / "adaptive"  # engine/adaptive/
 _STRATEGY_DIR = Path(__file__).parent.parent
 
 # Multipliers applied to config params based on Q-recommended action
@@ -57,7 +56,7 @@ _ACTION_MULTIPLIERS = {
 class EpisodeBridge:
     """
     Connects orchestrator events to the Thompson Sampling RL threshold learner.
-    Gracefully degrades to no-op if adaptive/ modules are unavailable.
+    Gracefully degrades to no-op if threshold learner is unavailable.
     """
 
     def __init__(self):
@@ -73,21 +72,9 @@ class EpisodeBridge:
         self._try_load()
 
     def _try_load(self):
-        # Load Q-learning components
+        # Load ThresholdLearner (Thompson Sampling bandit for score threshold)
         try:
-            sys.path.insert(0, str(_ADAPTIVE_DIR))
-            from episode_manager import EpisodeManager
-            from q_learner import QLearner
-            self.episode_mgr = EpisodeManager()
-            self.q_learner = QLearner()
-            logger.info("✓ RL Episode Bridge active (EpisodeManager + QLearner)")
-        except Exception as e:
-            logger.warning(f"RL Episode Bridge disabled: {e}")
-
-        # Load ThresholdLearner (independent — works even without adaptive/)
-        try:
-            sys.path.insert(0, str(Path(__file__).parent))
-            from threshold_learner import ThresholdLearner
+            from rl.threshold_learner import ThresholdLearner
             self.threshold_learner = ThresholdLearner()
             logger.info("✓ ThresholdLearner active (RL-trained score threshold)")
         except Exception as e:
@@ -276,17 +263,9 @@ class EpisodeBridge:
     def _detect_regime(self, portfolio: dict) -> str:
         """
         Detect current market regime.
-        Tries the adaptive regime_detector; falls back to a simple heuristic.
+        Uses a simple portfolio P&L heuristic for regime detection.
         """
-        try:
-            sys.path.insert(0, str(_ADAPTIVE_DIR))
-            from regime_detector import RegimeDetector
-            detector = RegimeDetector()
-            regime = detector.get_regime()
-            if regime in ("bull", "bear", "neutral", "unknown"):
-                return regime
-        except Exception as _e:
-            logger.debug("non-critical error: %s", _e)
+        # Heuristic regime detection (adaptive/ module removed)
 
         # Heuristic fallback: use portfolio P&L trend as a proxy
         try:
