@@ -239,7 +239,12 @@ def _build_trade_display(t):
 # ─── Shared Data Loaders ────────────────────────────────────────────────────
 def _load_plans():
     """Load all trade plans with display dicts and summary stats."""
+    # Engine plans (strategy_v2 options-first)
     plans = _read_jsonl(PLANS_FILE)
+    # Bot plans (options_v1 DCVX strategy)
+    for p in _read_jsonl(DATA_DIR / 'trade_plans.jsonl'):
+        p.setdefault('strategy', 'options_v1_dcvx')
+        plans.append(p)
     for p in plans:
         p['display'] = _build_plan_display(p)
 

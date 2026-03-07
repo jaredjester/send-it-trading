@@ -17,6 +17,7 @@ from pathlib import Path
 from datetime import datetime
 
 BASE_DIR = Path(__file__).parent
+REPO_DIR = BASE_DIR.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from core.alpaca_client import AlpacaClient
@@ -434,10 +435,41 @@ class SimpleOrchestrator:
 
         if self.alpha_engine:
             try:
-                # alpha_engine.score_opportunity returns a dict, NOT a float
-                result = self.alpha_engine.score_opportunity(symbol)
+                # ── Bot intel enrichment (news/insider/GEX from send-it-bot) ──
+                _sentiment_score = None
+                _intel_boost = 0
+                try:
+                    import json as _ji, os as _osi
+                    _dd = Path(_osi.getenv('DATA_DIR', str(REPO_DIR / 'data')))
+                    _nf = _dd / 'news_intel.json'
+                    if _nf.exists():
+                        _sn = _ji.loads(_nf.read_text()).get('symbols', {}).get(symbol, {}).get('news', {})
+                        if _sn:
+                            _rs = float(_sn.get('score', 0.5))
+                            _sentiment_score = _rs
+                            if _rs > 0.65:   _intel_boost += 12
+                            elif _rs < 0.35: _intel_boost -= 8
+                    _if = _dd / 'insider_intel.json'
+                    if _if.exists():
+                        _is = float(_ji.loads(_if.read_text()).get('data', {}).get(symbol, {}).get('score', 0))
+                        if _is > 0.5:    _intel_boost += 10
+                        elif _is < -0.3: _intel_boost -= 6
+                    _gf = _dd / 'gex_cache.json'
+                    if _gf.exists():
+                        _gd = _ji.loads(_gf.read_text()).get(symbol, {})
+                        if _gd.get('squeeze_active'):               _intel_boost += 15
+                        elif _gd.get('gex_regime') == 'positive_gamma': _intel_boost += 5
+                    _pf = _dd / 'polymarket_intel.json'
+                    if _pf.exists():
+                        for _m in _ji.loads(_pf.read_text()).get('by_symbol', {}).get(symbol, [])[:2]:
+                            if _m.get('bullish_signal'): _intel_boost += 5
+                except Exception:
+                    pass
+                # ── alpha_engine.score_opportunity returns a dict, NOT a float ─
+                result = self.alpha_engine.score_opportunity(symbol, sentiment_score=_sentiment_score)
                 if isinstance(result, dict):
                     raw_score = float(result.get("score", opp.get("score", 50)))
+                    raw_score = min(raw_score + _intel_boost, 100)  # bot intel boost
                 else:
                     raw_score = float(result)
 
