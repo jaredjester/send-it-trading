@@ -1,41 +1,32 @@
 #!/usr/bin/env python3
 """
 Alternative Data Aggregator
-Combines signals from Reddit, Google Trends, Options Flow, and FRED Macro.
+Combines signals from Reddit, Google Trends, Options Flow, FRED Macro, and StockTwits.
 Feeds unified signals into alpha_engine.py for trading decisions.
 """
 
 import json
 import os
+import logging
 from datetime import datetime
 from collections import defaultdict
 
-# Import our data sources
+logger = logging.getLogger("alt_data_aggregator")
+
+# Import data source modules
 try:
     from .reddit_sentiment import RedditSentimentScraper
     from .google_trends import GoogleTrendsTracker
     from .options_flow import OptionsFlowTracker
     from .fred_macro import FREDMacroTracker
-    try:
-        from .stocktwits_sentiment import StockTwitsScraper
-        HAS_STOCKTWITS = True
-    except ImportError:
-        HAS_STOCKTWITS = False
+    from .stocktwits_sentiment import StockTwitsScraper
 except ImportError:
-    # Try absolute imports if relative imports fail
-    try:
-        from reddit_sentiment import RedditSentimentScraper
-        from google_trends import GoogleTrendsTracker
-        from options_flow import OptionsFlowTracker
-        from fred_macro import FREDMacroTracker
-        try:
-            from stocktwits_sentiment import StockTwitsScraper
-            HAS_STOCKTWITS = True
-        except ImportError:
-            HAS_STOCKTWITS = False
-    except ImportError:
-        print("⚠️  Data source modules not found. Make sure they're in the same directory.")
-        HAS_STOCKTWITS = False
+    from reddit_sentiment import RedditSentimentScraper
+    from google_trends import GoogleTrendsTracker
+    from options_flow import OptionsFlowTracker
+    from fred_macro import FREDMacroTracker
+    from stocktwits_sentiment import StockTwitsScraper
+
 
 class AltDataAggregator:
     """
@@ -51,7 +42,11 @@ class AltDataAggregator:
         self.trends = GoogleTrendsTracker()
         self.options = OptionsFlowTracker()
         self.macro = FREDMacroTracker()
-        self.stocktwits = StockTwitsScraper() if HAS_STOCKTWITS else None
+        try:
+            self.stocktwits = StockTwitsScraper()
+        except Exception as e:
+            logger.debug("StockTwits unavailable: %s", e)
+            self.stocktwits = None
     
     def run_full_scan(self, watchlist):
         """

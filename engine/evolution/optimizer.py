@@ -59,8 +59,8 @@ def load_worker_trades(worker_id: str, since_days: int = WINDOW_DAYS) -> list[di
                 if ts < cutoff:
                     continue
             trades.append(t)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("non-critical error: %s", _e)
     return trades
 
 
@@ -122,8 +122,8 @@ def promote_champion(worker_id: str, params: dict, metrics: dict):
     if LIVE_CFG.exists():
         try:
             live = json.loads(LIVE_CFG.read_text())
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("non-critical error: %s", _e)
 
     # Apply champion params
     for key, val in params.items():

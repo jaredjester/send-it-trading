@@ -1,0 +1,15 @@
+{
+  "worker_id": "balanced",
+  "min_score_threshold": 45,
+  "max_position_pct": 0.12,
+  "min_trade_notional": 5.0,
+  "min_cash_reserve": 60.0,
+  "max_trades_per_cycle": 3,
+  "momentum.score_weight": 0.55,
+  "mean_reversion.score_weight": 0.35,
+  "sentiment.score_weight": 0.10,
+  "options.max_premium": 1.50,
+  "options.stop_loss_pct": 0.50,
+  "options.take_profit_pct": 1.00,
+  "live_sharpe_haircut": 0.55
+}

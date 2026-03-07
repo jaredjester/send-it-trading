@@ -1,0 +1,15 @@
+{
+  "worker_id": "aggressive",
+  "min_score_threshold": 38,
+  "max_position_pct": 0.15,
+  "min_trade_notional": 5.0,
+  "min_cash_reserve": 50.0,
+  "max_trades_per_cycle": 4,
+  "momentum.score_weight": 0.80,
+  "mean_reversion.score_weight": 0.10,
+  "sentiment.score_weight": 0.10,
+  "options.max_premium": 2.00,
+  "options.stop_loss_pct": 0.55,
+  "options.take_profit_pct": 1.10,
+  "live_sharpe_haircut": 0.65
+}

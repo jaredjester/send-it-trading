@@ -221,8 +221,8 @@ class EpisodeBridge:
         if self.threshold_learner:
             try:
                 logger.info(self.threshold_learner.summary(self._today_regime))
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("non-critical error: %s", _e)
 
         if not self.active or not self.current_episode_id:
             return
@@ -284,8 +284,8 @@ class EpisodeBridge:
             regime = detector.get_regime()
             if regime in ("bull", "bear", "neutral", "unknown"):
                 return regime
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("non-critical error: %s", _e)
 
         # Heuristic fallback: use portfolio P&L trend as a proxy
         try:
@@ -300,8 +300,8 @@ class EpisodeBridge:
                     return "bull"
                 elif pnl_pct < -0.01:
                     return "bear"
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("non-critical error: %s", _e)
 
         return "unknown"
 

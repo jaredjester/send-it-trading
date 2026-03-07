@@ -1,0 +1,15 @@
+{
+  "worker_id": "conservative",
+  "min_score_threshold": 55,
+  "max_position_pct": 0.10,
+  "min_trade_notional": 5.0,
+  "min_cash_reserve": 75.0,
+  "max_trades_per_cycle": 2,
+  "momentum.score_weight": 0.40,
+  "mean_reversion.score_weight": 0.40,
+  "sentiment.score_weight": 0.20,
+  "options.max_premium": 1.00,
+  "options.stop_loss_pct": 0.40,
+  "options.take_profit_pct": 0.90,
+  "live_sharpe_haircut": 0.50
+}

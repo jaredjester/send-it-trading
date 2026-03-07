@@ -22,47 +22,15 @@ sys.path.insert(0, str(BASE_DIR))
 
 from core.alpaca_client import AlpacaClient
 from core.dynamic_config import cfg, cfg_set
-try:
-    from signal_attribution import SignalAttributionTracker
-    HAS_ATTRIBUTION = True
-except Exception:
-    HAS_ATTRIBUTION = False
 # conviction_manager removed — pure systematic alpha (no conviction plays)
 
 # Scanner signals loaded natively via _load_scanner_signals() / _scanner_boost()
 
-try:
-    from alpha_engine import AlphaEngine
-    HAS_ALPHA_ENGINE = True
-except Exception:
-    HAS_ALPHA_ENGINE = False
-
-try:
-    from monte_carlo import MonteCarloSimulator
-    HAS_MONTE_CARLO = True
-except Exception:
-    HAS_MONTE_CARLO = False
-
-try:
-    from evaluation.online_learner import OnlineLearner
-    _online_learner = OnlineLearner()
-    HAS_ONLINE_LEARNER = True
-except Exception as _e:
-    HAS_ONLINE_LEARNER = False
-    _online_learner = None
-
-try:
-    from rl.episode_bridge import EpisodeBridge
-    HAS_RL = True
-except Exception as _e:
-    HAS_RL = False
-
-try:
-    from core.options_trader import OptionsTrader
-    HAS_OPTIONS = True
-except Exception as _e:
-    HAS_OPTIONS = False
-
+from alpha_engine import AlphaEngine
+from core.monte_carlo import MonteCarloSimulator
+_online_learner = None
+from rl.episode_bridge import EpisodeBridge
+from core.options_trader import OptionsTrader
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -86,78 +54,55 @@ class SimpleOrchestrator:
 
         self.alpaca = AlpacaClient(base_url="https://api.alpaca.markets")
 
-        if HAS_ALPHA_ENGINE:
-            try:
-                self.alpha_engine = AlphaEngine()
-                logger.info("✓ Alpha Engine loaded")
-            except Exception as e:
-                logger.warning(f"Alpha Engine failed: {e}")
-                self.alpha_engine = None
-        else:
+        try:
+            self.alpha_engine = AlphaEngine()
+            logger.info("✓ Alpha Engine loaded")
+        except Exception as e:
+            logger.error(f"Alpha Engine failed to load: {e}")
             self.alpha_engine = None
 
-        if HAS_MONTE_CARLO:
-            try:
-                self.monte_carlo = MonteCarloSimulator()
-            except Exception:
-                self.monte_carlo = None
-        else:
+        try:
+            self.monte_carlo = MonteCarloSimulator()
+        except Exception as e:
+            logger.warning(f"Monte Carlo unavailable: {e}")
             self.monte_carlo = None
 
-        # RL Episode Bridge
-        if HAS_RL:
-            try:
-                self.rl_bridge = EpisodeBridge()
-                logger.info("✓ RL Episode Bridge loaded")
-            except Exception as e:
-                logger.warning(f"RL Bridge failed: {e}")
-                self.rl_bridge = None
-        else:
+        try:
+            self.rl_bridge = EpisodeBridge()
+            logger.info("✓ RL Episode Bridge loaded")
+        except Exception as e:
+            logger.error(f"RL Bridge failed to load: {e}")
             self.rl_bridge = None
 
-        # Options Trader - options-first execution
-        if HAS_OPTIONS:
-            try:
-                self.options_trader = OptionsTrader(
-                    api_key=self.alpaca.api_key,
-                    api_secret=self.alpaca.api_secret,
-                )
-                logger.info("OptionsTrader loaded (options-first execution)")
-            except Exception as e:
-                logger.warning(f"OptionsTrader init failed: {e}")
-                self.options_trader = None
-        else:
+        try:
+            self.options_trader = OptionsTrader(
+                api_key=self.alpaca.api_key,
+                api_secret=self.alpaca.api_secret,
+            )
+            logger.info("✓ OptionsTrader loaded (options-first execution)")
+        except Exception as e:
+            logger.error(f"OptionsTrader failed to load: {e}")
             self.options_trader = None
+
+        self._online_learner = _online_learner
 
         # IC state cache
         self._ic_cache = {}
         self._load_ic_state()
 
-        # Track whether we've started today's episode (avoid double-start)
-        # Signal attribution tracker
-        if HAS_ATTRIBUTION:
-            try:
-                self.attribution = SignalAttributionTracker()
-                logger.info("✓ Signal Attribution Tracker loaded")
-            except Exception as _e:
-                logger.warning(f"Attribution failed: {_e}")
-                self.attribution = None
-        else:
-            self.attribution = None
-
         self._episode_started_today: str = ""
+        self._cycle_count = 0
 
-        # Log active config at startup
-        rl_action = cfg("rl_action")
         logger.info(
             f"Config: threshold={cfg('min_score_threshold')} "
             f"max_pos={cfg('max_position_pct'):.0%} "
             f"zombie={cfg('zombie_loss_threshold'):.0%} "
-            f"rl_action={rl_action} "
+            f"rl_action={cfg('rl_action')} "
             f"trade_mult={cfg('rl_trade_multiplier')} "
             f"size_mult={cfg('rl_size_multiplier')}"
         )
         logger.info("=" * 60)
+
 
     def _load_ic_state(self):
         """Load IC metrics for signal kill enforcement."""
@@ -257,13 +202,11 @@ class SimpleOrchestrator:
         try:
             self._submit_order(symbol=symbol, qty=str(qty), side="sell")
             logger.info(f"✓ SOLD {symbol} x{qty}")
-            if HAS_ONLINE_LEARNER and _online_learner:
+            if self._online_learner:
                 try:
-                    _online_learner.record_exit(symbol, exit_price=exit_price, outcome='sell')
-                except Exception:
-                    pass
-            if self.attribution and exit_price > 0:
-                self.attribution.on_exit(symbol, exit_price)
+                    self._online_learner.record_exit(symbol, exit_price=exit_price, outcome='sell')
+                except Exception as e:
+                    logger.debug("online_learner.record_exit failed: %s", e)
             return True
         except Exception as e:
             logger.error(f"Sell failed {symbol}: {e}")
@@ -293,22 +236,11 @@ class SimpleOrchestrator:
         try:
             self._submit_order(symbol=symbol, notional=notional, side="buy")
             logger.info("✓ BOUGHT %s $%.2f (signal=%s)" % (symbol, notional, signal_type))
-            if HAS_ONLINE_LEARNER and _online_learner:
+            if self._online_learner:
                 try:
-                    _online_learner.record_entry(symbol, notional, score=score, signals={})
-                except Exception:
-                    pass
-            if self.attribution and signal_type:
-                try:
-                    import requests as _rq
-                    r = _rq.get(
-                        f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
-                        headers=self._auth_headers(), timeout=5
-                    )
-                    ep = float(r.json().get("trade", {}).get("p", 0)) or 1.0
-                    self.attribution.on_entry(symbol, signal_type, score, ep)
-                except Exception:
-                    pass
+                    self._online_learner.record_entry(symbol, notional, score=score, signals={})
+                except Exception as e:
+                    logger.debug("online_learner.record_entry failed: %s", e)
             return True
         except Exception as e:
             logger.error(f"Buy failed {symbol}: {e}")
@@ -469,8 +401,8 @@ class SimpleOrchestrator:
                     if _pf.exists():
                         for _m in _ji.loads(_pf.read_text()).get('by_symbol', {}).get(symbol, [])[:2]:
                             if _m.get('bullish_signal'): _intel_boost += 5
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Bot intel enrichment failed for %s: %s", symbol, e)
                 # ── alpha_engine.score_opportunity returns a dict, NOT a float ─
                 result = self.alpha_engine.score_opportunity(symbol, sentiment_score=_sentiment_score)
                 if isinstance(result, dict):
@@ -490,11 +422,7 @@ class SimpleOrchestrator:
                 # signal, give a small nudge on top of alpha engine score
                 screener_type = opp.get("type", "")
                 # Dynamic boost: starts from prior knowledge, shifts to learned data
-                # after >= 5 trades per signal type (see signal_attribution.py)
-                if self.attribution and screener_type:
-                    boost = self.attribution.get_boost(screener_type)
-                    raw_score = min(raw_score + boost, 100)
-                elif screener_type == "finviz_preearnings":  # PEAD pre-announcement edge
+                if screener_type == "finviz_preearnings":  # PEAD pre-announcement edge
                     raw_score = min(raw_score + 15, 100)
                 elif screener_type == "finviz_postearnings":
                     raw_score = min(raw_score + 12, 100)
@@ -687,8 +615,8 @@ class SimpleOrchestrator:
             if plan_path.exists():
                 plan_path.unlink()
                 logger.info("Battle plan consumed and cleared")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Battle plan clear failed: %s", e)
 
     async def run_after_hours_cycle(self):
         """
@@ -775,8 +703,8 @@ class SimpleOrchestrator:
             p = await self.get_portfolio_state()
             if p:
                 self._last_portfolio = p
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("After-hours portfolio fetch failed: %s", e)
 
     async def run_cycle(self):
         logger.info("")
@@ -867,8 +795,6 @@ class SimpleOrchestrator:
                 logger.info("Episode ended — RL Q-update triggered")
 
         self._cycle_count = getattr(self, "_cycle_count", 0) + 1
-        if self.attribution and self._cycle_count % 10 == 0:
-            logger.info(self.attribution.summary())
         logger.info("=" * 80)
         logger.info("CYCLE COMPLETE")
         logger.info("=" * 80)

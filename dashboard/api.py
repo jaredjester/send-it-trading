@@ -272,7 +272,7 @@ def _docker_containers() -> list:
             "block_io": stat.get("block_io"),
             "alpaca_mode": env.get("ALPACA_MODE"),
             "worker_id": env.get("WORKER_ID"),
-            "config_override": env.get("CONFIG_OVERRIDE"),
+            "eval_dir": env.get("EVAL_DIR"),
         })
     return containers
 

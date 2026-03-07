@@ -76,8 +76,8 @@ def load_current_config() -> dict:
     if LIVE_CONFIG.exists():
         try:
             return json.loads(LIVE_CONFIG.read_text())
-        except:
-            pass
+        except Exception as _e:
+                logger.debug("non-critical: %s", _e)
     return {'min_score_threshold': 68, 'max_position_pct': 0.10, 'stop_loss_pct': -0.08, 'quality_score': 0}
 
 
