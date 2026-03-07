@@ -17,6 +17,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from shlex import split as shlex_split
+sys.path.insert(0, str(Path(__file__).parent.parent / 'engine'))
+from core.trading_db import db
 
 # ─── Path Setup ──────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
@@ -371,8 +373,8 @@ def _build_trade_display(t):
 def _load_plans():
     """Load all trade plans with display dicts and summary stats. Deduplicates by plan_id."""
     # Engine plans (strategy_v2 options-first)
-    plans = _read_jsonl(PLANS_FILE)
-    seen_ids = {p.get('plan_id') for p in plans if p.get('plan_id')}
+    plans = db.get_positions()
+    seen_ids = {p.get('id') for p in plans if p.get('id')}
     # Bot plans (options_v1 DCVX) — skip any already present in engine file
     for p in _read_jsonl(DATA_DIR / 'trade_plans.jsonl'):
         pid = p.get('plan_id')
@@ -407,16 +409,15 @@ def _load_plans():
 
 
 def _load_trades():
-    """Load trade history from plans file (closed trades + open)."""
-    # Plans file doubles as trade log — closed plans = completed trades
-    plans = _read_jsonl(PLANS_FILE)
-    # Also check dedicated trade memory if it exists
-    trades = _read_jsonl(TRADES_FILE)
-    # Merge, deduplicate by plan_id/trade_id
+    """Load trade history from database."""
+    # Plans = positions, trades = trades
+    plans = db.get_positions()
+    trades = db.get_trades()
+    # Merge, deduplicate by id
     seen_ids = set()
     merged = []
     for t in (trades + plans):
-        tid = t.get('plan_id') or t.get('trade_id') or t.get('occ_symbol', '')
+        tid = t.get('id') or t.get('trade_id') or t.get('occ_symbol', '')
         if tid and tid in seen_ids:
             continue
         if tid:
@@ -864,13 +865,9 @@ def api_stream():
             except Exception as e:
                 app.logger.debug("SSE signals push failed: %s", e)
 
-            # Plans: on file change
+            # Plans: always send for now (since db doesn't have mtime)
             try:
-                if PLANS_FILE.exists():
-                    mt = PLANS_FILE.stat().st_mtime
-                    if mt != last_plans_mtime:
-                        last_plans_mtime = mt
-                        yield _event('plans', _load_plans())
+                yield _event('plans', _load_plans())
             except Exception as e:
                 app.logger.debug("SSE plans push failed: %s", e)
 

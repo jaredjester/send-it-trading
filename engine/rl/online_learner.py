@@ -23,7 +23,8 @@ class OnlineLearner:
         if self.STATE_FILE.exists():
             try:
                 return json.loads(self.STATE_FILE.read_text())
-            except: pass
+            except Exception as e:
+                logger.warning(f"Failed to load state: {e}")
         return {
             'signal_distributions': dict(self.DEFAULT_PRIORS),
             'pending_trades': {},

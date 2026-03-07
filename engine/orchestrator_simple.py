@@ -38,7 +38,7 @@ except Exception as _e:
 from rl.episode_bridge import EpisodeBridge
 from core.options_trader import OptionsTrader
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(BASE_DIR / "logs/trading.log"),
@@ -219,6 +219,12 @@ class SimpleOrchestrator:
             return False
 
     async def execute_buy(self, symbol, notional, signal_type='', score=0.0):
+        if not symbol or not isinstance(symbol, str) or not symbol.isalpha():
+            raise ValueError(f"Invalid symbol: {symbol}")
+        if not isinstance(notional, (int, float)) or notional <= 0:
+            raise ValueError(f"Invalid notional: {notional}")
+        if not isinstance(score, (int, float)) or not (0 <= score <= 100):
+            raise ValueError(f"Invalid score: {score}")
         # OPTIONS FIRST — try options before stock
         if self.options_trader:
             try:

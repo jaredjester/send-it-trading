@@ -237,15 +237,16 @@ def is_high_risk_sector(sector: str) -> bool:
 
 if __name__ == '__main__':
     # Test the mapping
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()))
+    logger = logging.getLogger(__name__)
     
     test_symbols = ['AAPL', 'GME', 'TSLA', 'SPY', 'UNKNOWN', 'COIN']
-    print("Symbol-to-Sector Test:")
+    logger.info("Symbol-to-Sector Test:")
     for symbol in test_symbols:
         sector = get_sector(symbol)
         etf = get_sector_etf(sector)
-        print(f"  {symbol:8} → {sector:15} → {etf}")
+        logger.info(f"  {symbol:8} → {sector:15} → {etf}")
     
-    print(f"\nTotal sectors: {len(get_all_sectors())}")
-    print(f"Total symbols mapped: {len(SYMBOL_TO_SECTOR)}")
-    print(f"Meme stocks: {get_symbols_in_sector('meme')}")
+    logger.info(f"\nTotal sectors: {len(get_all_sectors())}")
+    logger.info(f"Total symbols mapped: {len(SYMBOL_TO_SECTOR)}")
+    logger.info(f"Meme stocks: {get_symbols_in_sector('meme')}")
