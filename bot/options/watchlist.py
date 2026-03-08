@@ -29,6 +29,7 @@ DEFAULT_SYMBOLS = [
     'SPY', 'QQQ', 'AAPL', 'TSLA', 'NVDA',
     'AMD', 'META', 'MSFT', 'AMZN', 'COIN',
     'GOOGL', 'NFLX', 'UBER', 'BABA', 'PLTR',
+    'GME',
 ]
 
 
