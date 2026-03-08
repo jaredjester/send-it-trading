@@ -768,8 +768,8 @@ def api_contrarian():
         insider_data = _read_json(INSIDER_INTEL) or {}
         poly_data    = _read_json(POLY_INTEL) or {}
 
-        news_by_sym    = news_data.get('by_symbol', {})
-        insider_by_sym = insider_data.get('by_symbol', {})
+        news_by_sym    = news_data.get('symbols', news_data.get('by_symbol', {}))
+        insider_by_sym = insider_data.get('data', insider_data.get('by_symbol', {}))
         poly_by_sym    = poly_data.get('by_symbol', {})
 
         signals = []
@@ -780,7 +780,7 @@ def api_contrarian():
             ins = insider_by_sym.get(symbol, {})
             poly_sigs = poly_by_sym.get(symbol, [])
 
-            news_score    = float(ns.get('score', 0))        # -1..+1
+            news_score    = float((ns.get('news') or {}).get('score', ns.get('combined_score', 0)))  # -1..+1
             insider_score = float(ins.get('score', 0))       # -1..+1
             insider_label = ins.get('label', 'neutral')
             poly_score    = float(poly_sigs[0].get('score', 0)) if poly_sigs else 0.0
