@@ -92,6 +92,28 @@
     .news-bar   { width:100%; height:2px; border-radius:1px; background:rgba(255,255,255,.06); margin-top:6px; overflow:hidden; }
     .news-bar-f { height:100%; border-radius:1px; transition:width .5s; }
 
+    /* ── CONTRARIAN RESEARCH ── */
+    .contrarian-card { margin-bottom:10px; overflow:hidden; }
+    .contrarian-hdr  { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .contrarian-scroll{ max-height:240px; overflow-y:auto; }
+    .contrarian-scroll::-webkit-scrollbar{ width:3px; }
+    .contrarian-scroll::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.12); border-radius:2px; }
+    .contrarian-item  { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.04); }
+    .contrarian-item:last-child { border-bottom:none; }
+    .contrarian-boost { flex-shrink:0; text-align:center; width:42px; }
+    .contrarian-pct   { font-size:14px; font-weight:700; line-height:1; }
+    .contrarian-type  { font-size:8px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-top:1px; }
+    .contrarian-body  { flex:1; min-width:0; }
+    .contrarian-sym   { font-size:11px; font-weight:700; margin-bottom:2px; }
+    .contrarian-signal{ font-size:10px; line-height:1.4; color:var(--t2); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .contrarian-meta  { font-size:9px; color:var(--t3); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+    .contrarian-bar   { width:100%; height:2px; border-radius:1px; background:rgba(255,255,255,.07); margin-top:4px; overflow:hidden; }
+    .contrarian-fill  { height:100%; border-radius:1px; transition:width .8s; }
+    .ctag             { font-size:9px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:4px; }
+    .ctag-paradigm    { background:rgba(124,77,255,.15); color:var(--purple); border:1px solid rgba(124,77,255,.25); }
+    .ctag-consensus   { background:rgba(255,145,0,.15); color:var(--orange); border:1px solid rgba(255,145,0,.25); }
+    .ctag-citation    { background:rgba(0,229,255,.15); color:var(--cyan); border:1px solid rgba(0,229,255,.25); }
+
     /* ── POLY TICKER ── */
     .poly-card { margin-bottom:10px; overflow:hidden; }
     .poly-hdr  { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
@@ -116,6 +138,7 @@
     .heat-sym  { font-size:10px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .heat-gap  { font-size:10px; font-weight:600; margin-top:2px; }
     .heat-news { font-size:8px; margin-top:2px; }
+    .heat-vwap { font-size:8px; margin-top:1px; }
 
 
     /* ── POSITIONS ── */
@@ -309,8 +332,21 @@
     <!-- populated by JS -->
   </div>
 
+  <!-- CONTRARIAN RESEARCH -->
+  <div class="slabel">Contrarian Research Signals</div>
+  <div class="card contrarian-card">
+    <div class="contrarian-hdr">
+      <div style="font-size:11px;font-weight:600;">Research Intelligence</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:10px;color:var(--t2);" id="contrarian-summary">—</span>
+        <span style="font-size:9px;color:var(--t3);" id="contrarian-ts">—</span>
+      </div>
+    </div>
+    <div class="contrarian-scroll" id="contrarian-feed"></div>
+  </div>
+
   <!-- TRENDING NEWS -->
-  <div class="slabel">Trending Headlines</div>
+  <div class="slabel" style="margin-top:10px;">Trending Headlines</div>
   <div class="card news-card">
     <div class="news-hdr">
       <div class="news-title">FinBERT Scored News</div>
@@ -508,6 +544,17 @@
       if (Math.abs(intel.market_proxy||0) > 0.5) drivers.push({label:'SPY gap', score:spyGap});
     }
 
+    // VWAP signals
+    const vwapVals = Object.values(sigSyms).map(d => d.vwap?.signal_strength || 0).filter(s => s !== 0);
+    if (vwapVals.length) {
+      const vwapAvg = vwapVals.reduce((a,b)=>a+b,0)/vwapVals.length;
+      const vwapDevs = Object.values(sigSyms).map(d => d.vwap?.deviation || 0).filter(d => d !== 0);
+      const avgDev = vwapDevs.length ? vwapDevs.reduce((a,b)=>a+b,0)/vwapDevs.length : 0;
+      const vwapScore = avgDev > 0 ? vwapAvg : -vwapAvg; // Positive deviation = bullish, negative = bearish
+      scores.push(vwapScore * 0.7); // Weight VWAP signals
+      if (Math.abs(vwapScore) > 0.1) drivers.push({label:'VWAP', score:vwapScore});
+    }
+
     // VIX penalty
     if (vixPenalty) { scores.push(vixPenalty); drivers.push({label:'VIX fear', score:vixPenalty}); }
 
@@ -604,7 +651,10 @@
         const gap   = d.gap_pct || 0;
         const ns    = d.news?.score || 0;
         const is_   = sigSyms[sym]?.insider?.score || 0;
-        const combined = ns * 0.6 + is_ * 0.4 + gap / 20;
+        const vwap  = sigSyms[sym]?.vwap?.signal_strength || 0;
+        const vwapDev = sigSyms[sym]?.vwap?.deviation || 0;
+        const vwapScore = vwapDev !== 0 ? (vwapDev > 0 ? vwap : -vwap) : 0;
+        const combined = ns * 0.5 + is_ * 0.3 + vwapScore * 0.2 + gap / 20;
         const bg = combined > 0.08 ? 'rgba(0,230,118,.12)' :
                    combined < -0.08 ? 'rgba(255,23,68,.12)' :
                    'rgba(255,255,255,.04)';
@@ -613,13 +663,103 @@
                        '1px solid rgba(255,255,255,.07)';
         const gc = gap > 0 ? 'var(--green)' : gap < 0 ? 'var(--red)' : 'var(--t2)';
         const gstr = gap !== 0 ? (gap>0?'+':'')+gap.toFixed(1)+'%' : '—';
+        const vwapColor = scoreColor(vwapScore);
+        const vwapIndicator = vwap !== 0 ? (vwapScore>0?'⬆':'⬇') : '·';
         return `<div class="heat-cell" style="background:${bg};border:${border}">
           <div class="heat-sym">${sym}</div>
           <div class="heat-gap" style="color:${gc}">${gstr}</div>
           <div class="heat-news" style="color:${scoreColor(ns)}">${ns!==0?(ns>0?'▲':'▼'):'·'}</div>
+          <div class="heat-vwap" style="color:${vwapColor};font-size:9px;">${vwapIndicator}</div>
         </div>`;
       });
     $('heat-grid').innerHTML = cells.join('');
+  }
+
+  // ── Contrarian Research feed ─────────────────────────
+  function renderContrarianFeed(data) {
+    if (!data) return;
+
+    const ts = data.updated_at ? new Date(data.updated_at).toLocaleTimeString() : '—';
+    $('contrarian-ts').textContent = ts;
+
+    // Summary stats
+    const summary = data.summary || {};
+    const summaryText = `${summary.high_boost_symbols || 0} boosts · ${summary.paradigm_candidates || 0} paradigm · ${summary.high_risk_symbols || 0} risks`;
+    $('contrarian-summary').textContent = summaryText;
+
+    const symbols = data.symbols || [];
+    if (!symbols.length) {
+      $('contrarian-feed').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:11px;">No contrarian signals found</div>';
+      return;
+    }
+
+    $('contrarian-feed').innerHTML = symbols.slice(0, 12).map(s => {
+      const boost = (s.boost_potential || 0) * 100;
+      const risk = (s.over_consensus_risk || 0) * 100;
+      const paradigm = (s.paradigm_score || 0) * 100;
+
+      const boostColor = boost > 30 ? 'var(--green)' : boost > 15 ? 'var(--cyan)' : 'var(--t2)';
+      const riskColor = risk > 50 ? 'var(--red)' : risk > 25 ? 'var(--orange)' : 'var(--t2)';
+
+      // Determine primary signal type and color
+      let primaryType, primaryPct, primaryColor;
+      if (boost > 20) {
+        primaryType = 'BOOST'; primaryPct = boost.toFixed(0); primaryColor = boostColor;
+      } else if (paradigm > 40) {
+        primaryType = 'SHIFT'; primaryPct = paradigm.toFixed(0); primaryColor = 'var(--purple)';
+      } else if (risk > 50) {
+        primaryType = 'RISK'; primaryPct = risk.toFixed(0); primaryColor = riskColor;
+      } else {
+        primaryType = 'WEAK'; primaryPct = Math.max(boost, paradigm, risk).toFixed(0); primaryColor = 'var(--t2)';
+      }
+
+      // Generate tags for significant patterns
+      const tags = [];
+      if (paradigm > 40) tags.push('<span class="ctag ctag-paradigm">PARADIGM</span>');
+      if (risk > 50) tags.push('<span class="ctag ctag-consensus">CONSENSUS</span>');
+      if (s.citation_pattern_strength > 0.6) tags.push('<span class="ctag ctag-citation">CITATIONS</span>');
+
+      // Build signal description
+      const patterns = [];
+      if (s.research_quality > 0.7) patterns.push(`High quality research (${(s.research_quality * 100).toFixed(0)}%)`);
+      if (s.divergence_strength > 0.6) patterns.push(`Strong divergence vs consensus`);
+      if (s.citation_pattern_strength > 0.6) patterns.push(`Citation pattern signals timing`);
+
+      const signalDesc = patterns.length > 0 ? patterns.slice(0, 2).join('; ') : 'Analyzing contrarian patterns...';
+
+      const fillWidth = Math.min(100, Math.max(boost, paradigm, risk));
+
+      return `<div class="contrarian-item">
+        <div class="contrarian-boost">
+          <div class="contrarian-pct" style="color:${primaryColor}">${primaryPct}%</div>
+          <div class="contrarian-type" style="color:${primaryColor}">${primaryType}</div>
+        </div>
+        <div class="contrarian-body">
+          <div class="contrarian-sym">${s.symbol}</div>
+          <div class="contrarian-signal">${tags.join('')}${signalDesc}</div>
+          <div class="contrarian-meta">
+            <span>Quality: ${(s.research_quality * 100).toFixed(0)}%</span>
+            <span>Divergence: ${(s.divergence_strength * 100).toFixed(0)}%</span>
+            <span>Risk: ${risk.toFixed(0)}%</span>
+          </div>
+          <div class="contrarian-bar">
+            <div class="contrarian-fill" style="width:${fillWidth}%;background:${primaryColor}"></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Fetch contrarian data periodically
+  async function fetchContrarianData() {
+    try {
+      const response = await fetch('/api/contrarian');
+      const data = await response.json();
+      renderContrarianFeed(data);
+    } catch (err) {
+      console.warn('Contrarian data fetch failed', err);
+      $('contrarian-feed').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:11px;">Data unavailable</div>';
+    }
   }
 
   // ── Polymarket feed ───────────────────────────────────
@@ -1123,6 +1263,11 @@
   setInterval(()=>{ $('clock').textContent=new Date().toLocaleString(); }, 1000);
   refreshProcesses();
   setInterval(refreshProcesses, 10000);
+
+  // Initialize contrarian data and refresh every 5 minutes
+  fetchContrarianData();
+  setInterval(fetchContrarianData, 300000); // 5 minutes
+
   connect();
 </script>
 </body>

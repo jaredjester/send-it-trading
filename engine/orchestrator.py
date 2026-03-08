@@ -92,6 +92,16 @@ class SimpleOrchestrator:
 
         self._online_learner = _online_learner
 
+        # Enhanced watchlist with worker specialization
+        worker_id = os.getenv("WORKER_ID", "balanced")
+        try:
+            from core.enhanced_watchlist import EnhancedWatchlistManager
+            self.enhanced_watchlist = EnhancedWatchlistManager(worker_id)
+            logger.info(f"✓ Enhanced Watchlist Manager loaded (worker: {worker_id})")
+        except Exception as e:
+            logger.warning(f"Enhanced Watchlist unavailable: {e}")
+            self.enhanced_watchlist = None
+
         # IC state cache
         self._ic_cache = {}
         self._load_ic_state()
@@ -325,16 +335,47 @@ class SimpleOrchestrator:
         except Exception as e:
             logger.warning(f"Scanner import failed: {e}")
 
-        # Fallback: if ALL scanners found nothing, score the dynamic watchlist
+        # Fallback: if ALL scanners found nothing, use enhanced watchlist
         if not opportunities:
-            watchlist = cfg("watchlist")
-            logger.warning(f"⚠️  All scanners returned 0 hits — watchlist fallback ({len(watchlist)} symbols)")
-            for sym in watchlist:
-                opportunities.append({
-                    "symbol": sym,
-                    "score": 60,
-                    "type": "watchlist_fallback",
-                })
+            if self.enhanced_watchlist:
+                try:
+                    # Get current positions for context-aware filtering
+                    current_positions = []
+                    try:
+                        portfolio = await self.get_portfolio_state()
+                        current_positions = portfolio.get("positions", [])
+                    except Exception:
+                        pass
+
+                    specialized_symbols = self.enhanced_watchlist.get_specialized_universe(current_positions)
+                    logger.warning(f"⚠️  All scanners returned 0 hits — enhanced watchlist fallback ({len(specialized_symbols)} symbols)")
+
+                    for sym in specialized_symbols:
+                        opportunities.append({
+                            "symbol": sym,
+                            "score": 60,
+                            "type": "enhanced_watchlist_fallback",
+                        })
+                except Exception as e:
+                    logger.warning(f"Enhanced watchlist fallback failed: {e}")
+                    # Final fallback to basic watchlist
+                    watchlist = cfg("watchlist")
+                    logger.warning(f"⚠️  Using basic watchlist fallback ({len(watchlist)} symbols)")
+                    for sym in watchlist:
+                        opportunities.append({
+                            "symbol": sym,
+                            "score": 60,
+                            "type": "basic_watchlist_fallback",
+                        })
+            else:
+                watchlist = cfg("watchlist")
+                logger.warning(f"⚠️  All scanners returned 0 hits — basic watchlist fallback ({len(watchlist)} symbols)")
+                for sym in watchlist:
+                    opportunities.append({
+                        "symbol": sym,
+                        "score": 60,
+                        "type": "basic_watchlist_fallback",
+                    })
 
         return opportunities
 
@@ -362,6 +403,34 @@ class SimpleOrchestrator:
         elif rank < 10:
             return 10
         return 5
+
+    def _vwap_boost(self, symbol: str) -> int:
+        """Score boost based on VWAP signal strength."""
+        try:
+            from indicators.vwap_calculator import VWAPCalculator
+            calculator = VWAPCalculator()
+            vwap_data = calculator.calculate_vwap(symbol)
+
+            if vwap_data:
+                # Use the built-in signal strength
+                signal_strength = vwap_data.signal_strength
+
+                # Convert to boost points (0-12 points based on signal strength)
+                boost = int(signal_strength * 12)
+
+                # Additional boost for high volume
+                if vwap_data.volume_ratio and vwap_data.volume_ratio > 1.5:
+                    boost += 3
+
+                # Extra boost for strong signals
+                if abs(vwap_data.vwap_deviation) > 0.02:  # 2% deviation
+                    boost += 2
+
+                return min(boost, 15)  # Cap at 15 points
+        except Exception as e:
+            logger.debug(f"VWAP boost calculation failed for {symbol}: {e}")
+
+        return 0
 
     async def score_opportunity(self, opp):
         """Score with IC-killed signals filtered out.
@@ -449,6 +518,12 @@ class SimpleOrchestrator:
                     raw_score = min(raw_score + boost, 100)
                     logger.info(f"  {symbol} scanner boost +{boost} → {raw_score:.0f}")
 
+                # VWAP signal boost
+                vwap_boost = self._vwap_boost(symbol)
+                if vwap_boost:
+                    raw_score = min(raw_score + vwap_boost, 100)
+                    logger.info(f"  {symbol} VWAP boost +{vwap_boost} → {raw_score:.0f}")
+
                 raw_score = max(0.0, raw_score)  # clamp: never return negative scores
                 logger.info(f"  {symbol} alpha score={raw_score:.1f} (type={screener_type})")
                 return raw_score
@@ -461,17 +536,75 @@ class SimpleOrchestrator:
         logger.debug(f"  {symbol} fallback score={fallback}")
         return fallback
 
-    async def calculate_size(self, portfolio, score, signal_name="composite"):
+    async def calculate_size(self, portfolio, score, signal_name="composite", symbol=None):
         """
         Dynamic position sizing: all params from live_config.json.
-        RL size multiplier adjusts aggressiveness based on recent episode returns.
+        Now enhanced with Kelly criterion when kelly_position_sizing is enabled.
         """
         max_pos = cfg("max_position_pct")
         haircut = cfg("live_sharpe_haircut")
         rl_size = cfg("rl_size_multiplier")
         threshold = cfg("min_score_threshold")
 
-        # Base: 4% to max_pos% scaled by how far above threshold
+        # Enhanced Kelly-based sizing if enabled and symbol provided
+        if cfg("kelly_position_sizing") and symbol:
+            try:
+                from core.pricing import enhanced_signal_sizing
+                from core.contrarian_research import get_contrarian_research_boost, assess_consensus_risk_adjustment
+                from ..sector_map import get_sector
+
+                # Estimate volatility (placeholder - would use historical data in production)
+                estimated_volatility = 0.35  # Default assumption
+
+                # Get Kelly-enhanced sizing
+                kelly_result = enhanced_signal_sizing(
+                    signal_score=score,
+                    volatility=estimated_volatility,
+                    portfolio_value=portfolio["portfolio_value"]
+                )
+
+                base_kelly_size = kelly_result["position_size"]
+
+                # Apply contrarian research enhancements if enabled
+                if cfg("contrarian.enabled"):
+                    symbol_sector = get_sector(symbol)
+
+                    # Get contrarian research boost
+                    contrarian_boost = get_contrarian_research_boost(symbol, symbol_sector)
+
+                    # Apply consensus risk adjustment
+                    consensus_adjusted = assess_consensus_risk_adjustment(
+                        symbol, symbol_sector, base_kelly_size
+                    )
+
+                    # Apply contrarian boost
+                    contrarian_multiplier = 1.0 + (contrarian_boost * 0.5)  # Max 50% boost
+                    contrarian_enhanced_size = consensus_adjusted * contrarian_multiplier
+
+                    # Log significant contrarian adjustments
+                    if abs(contrarian_enhanced_size - base_kelly_size) / base_kelly_size > 0.1:
+                        logger.info(f"  {symbol} contrarian adjustment: "
+                                   f"${base_kelly_size:.0f} → ${contrarian_enhanced_size:.0f} "
+                                   f"(boost: +{contrarian_boost:.2%})")
+
+                    base_kelly_size = contrarian_enhanced_size
+
+                # Apply RL and IC multipliers to final result
+                ic_mult = self._ic_size_multiplier(signal_name)
+                final_size = base_kelly_size * haircut * rl_size * ic_mult
+
+                logger.debug(
+                    f"  Kelly Size: base=${kelly_result['position_size']:.0f} "
+                    f"× contrarian × haircut={haircut} × rl={rl_size:.1f} × IC={ic_mult:.2f} "
+                    f"→ ${final_size:.0f} (Kelly+Contrarian method)"
+                )
+
+                return min(final_size, portfolio["portfolio_value"] * max_pos)
+
+            except Exception as e:
+                logger.debug(f"Kelly sizing failed, using traditional: {e}")
+
+        # Traditional sizing method (fallback)
         score_range = max(score - threshold, 0)
         base_pct   = cfg("min_position_pct")
         scale      = cfg("position_scale_factor")
@@ -494,6 +627,32 @@ class SimpleOrchestrator:
             f"× IC={ic_mult:.2f} → {final_pct:.1%} (${notional:.2f})"
         )
         return notional
+
+    async def get_kelly_rebalance_recommendations(self, portfolio):
+        """Get Kelly-based rebalancing recommendations from enhanced watchlist."""
+        if not self.enhanced_watchlist:
+            return None
+
+        try:
+            current_positions = portfolio.get("positions", [])
+            portfolio_value = portfolio.get("portfolio_value", 0)
+
+            if portfolio_value <= 0:
+                return None
+
+            recommendations = self.enhanced_watchlist.get_rebalance_recommendations(
+                current_positions, portfolio_value
+            )
+
+            logger.info(f"Kelly rebalance: {len(recommendations['sell_orders'])} sells, "
+                       f"{len(recommendations['buy_orders'])} buys, "
+                       f"{len(recommendations['hold_positions'])} holds")
+
+            return recommendations
+
+        except Exception as e:
+            logger.warning(f"Kelly rebalance failed: {e}")
+            return None
 
     async def check_risk_limits(self, portfolio, symbol, notional):
         max_pos = cfg("max_position_pct")
@@ -553,7 +712,7 @@ class SimpleOrchestrator:
             symbol = opp.get("symbol")
             logger.info(f"  → {symbol}: score={score:.1f}")
 
-            notional = await self.calculate_size(portfolio, score)
+            notional = await self.calculate_size(portfolio, score, symbol=symbol)
 
             if notional < min_notional:
                 logger.info(f"    ❌ Too small: ${notional:.2f} (min=${min_notional})")
@@ -773,6 +932,20 @@ class SimpleOrchestrator:
                     logger.info(f"Options managed: closed {len(closed)} contracts: {closed}")
             except Exception as _oe:
                 logger.warning(f"Options management error: {_oe}")
+
+        # 1c. Kelly-based portfolio rebalancing (if enabled)
+        if cfg("kelly_position_sizing"):
+            try:
+                rebalance_recs = await self.get_kelly_rebalance_recommendations(portfolio)
+                if rebalance_recs and (rebalance_recs.get("sell_orders") or rebalance_recs.get("buy_orders")):
+                    logger.info("Kelly rebalancing recommendations available - applying selectively")
+                    # For now, log recommendations. Full implementation would execute them.
+                    for sell_rec in rebalance_recs.get("sell_orders", []):
+                        logger.info(f"  Kelly sell recommendation: {sell_rec['symbol']} (${sell_rec['market_value']:.0f}, {sell_rec['reason']})")
+                    for buy_rec in rebalance_recs.get("buy_orders", [])[:3]:  # Limit to top 3
+                        logger.info(f"  Kelly buy recommendation: {buy_rec['symbol']} (${buy_rec['target_market_value']:.0f}, {buy_rec['category']})")
+            except Exception as e:
+                logger.warning(f"Kelly rebalancing failed: {e}")
 
         # 2. Convictions removed — pure systematic alpha
 

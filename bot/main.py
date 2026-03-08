@@ -2,9 +2,9 @@
 import signal as _signal
 import threading as _threading
 """
-Options V1 — Master Orchestrator
+Options Trading — Master Orchestrator
 Pipeline:
-  1. Pull symbols from live Alpaca watchlist ("Options V1")
+  1. Pull symbols from live Alpaca watchlist ("Options Trading")
   2. Pre-filter: Alpaca-optionable + CA risk check w/ FinBERT sentiment
   3. Scan with Directional Convex strategy
   4. EV filter + Kelly sizing (RL-adapted, CA sentiment boosts/cuts Kelly)
@@ -20,7 +20,8 @@ import time
 import uuid
 import logging
 import requests
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timezone, timedelta
 
 BOT_DIR = Path(__file__).resolve().parent
 REPO_DIR = BOT_DIR.parent
@@ -30,41 +31,38 @@ sys.path.insert(0, str(REPO_DIR))
 import alpaca_env
 alpaca_env.bootstrap()
 
-from options_v1.data       import market_data_bundle, get_risk_free_rate, get_spot, get_option_chain, get_account, get_positions, get_option_snapshot
-from options_v1.pricing    import bs_price, bs_greeks, pnl_distribution, OptionSpec
-from options_v1.kelly      import compute_kelly, position_size
-from options_v1.risk       import RiskManager, GreekLimits, Position
-from options_v1.strategies import DirectionalConvexStrategy, Signal  # VRP removed (sells puts, requires margin)
-from options_v1.rl         import RLTrainer, TradeRecord
-from options_v1.execution  import (
+from options.data       import market_data_bundle, get_risk_free_rate, get_spot, get_option_chain, get_account, get_positions, get_option_snapshot
+from options.pricing    import bs_price, bs_greeks, pnl_distribution, OptionSpec
+from options.kelly      import compute_kelly, position_size
+from options.risk       import RiskManager, GreekLimits, Position
+from options.strategies import DirectionalConvexStrategy, Signal  # VRP removed (sells puts, requires margin)
+from options.rl         import RLTrainer, TradeRecord
+from options.execution  import (
     submit_option_order, build_occ_symbol, close_position,
     get_market_quote, submit_gtc_exit_order, verify_position_closed,
     get_open_orders, cancel_order
 )
-from options_v1.trade_planner import create_plan, save_plan, load_open_plans, close_plan, update_plan_oc
-from options_v1.opportunity_cost import OpportunityCostEngine
-from options_v1.watchlist  import WatchlistManager
-from options_v1.calendar   import filter_corporate_action_risks
-from options_v1.synthetic_pricing import SyntheticPricer
-from options_v1.news_scanner       import run_news_scan, get_vix
-from options_v1.dynamic_watchlist  import run_dynamic_update, get_dynamic_status
-from options_v1.gamma_scanner      import get_scanner as get_gamma_scanner, scan_and_alert as gamma_scan_alert, GammaProfile
-from options_v1             import insider_scanner
-from options_v1             import polymarket_scanner
+from options.trade_planner import create_plan, save_plan, load_open_plans, close_plan, update_plan_oc
+from options.opportunity_cost import OpportunityCostEngine
+from engine.core.account_manager import AccountManager
+from options.watchlist  import WatchlistManager
+from options.calendar   import filter_corporate_action_risks
+from options.synthetic_pricing import SyntheticPricer
+from options.news_scanner       import run_news_scan, get_vix
+from engine.core.alpaca_client import AlpacaClient
+from options.gamma_scanner      import get_scanner as get_gamma_scanner, scan_and_alert as gamma_scan_alert, GammaProfile
+from options             import insider_scanner
+from options             import polymarket_scanner
 try:
-    from options_v1 import telegram_alerts as _tg
+    from options import telegram_alerts as _tg
 except Exception as _e:
     logging.getLogger('bot').warning('Telegram alerts unavailable: %s', _e)
     _tg = None
 
 # ── Logging ────────────────────────────────────────────────────────────────────
+from engine.core.logging_config import setup_logging
 LOG_FILE = str(Path(os.getenv('LOG_DIR', str(BOT_DIR.parent / 'engine' / 'logs'))) / 'bot.log')
-os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-logging.basicConfig(
-    level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper()),
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
-)
+setup_logging(log_file=LOG_FILE)
 logger = logging.getLogger('main')
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -147,14 +145,13 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 def get_finviz_signals(base_symbols: list):
-    import json as _json, os as _os, time as _time
     bus_path = str(Path(__file__).resolve().parent.parent / 'state/latest_signals.json')
     try:
-        if _os.path.exists(bus_path):
-            age = _time.time() - _os.path.getmtime(bus_path)
+        if os.path.exists(bus_path):
+            age = time.time() - os.path.getmtime(bus_path)
             if age < 1800:
-                with open(bus_path) as _f:
-                    data = _json.load(_f)
+                with open(bus_path) as f:
+                    data = json.load(f)
                 hits = [h for h in data.get('signals', []) if h.get('symbol') in base_symbols]
                 if hits:
                     logger.info('Signal bus: %d signals match watchlist (age=%.0fs)', len(hits), age)
@@ -183,16 +180,9 @@ def is_market_open() -> bool:
 
 def get_capital() -> float:
     try:
-        r = requests.get(
-            'https://api.alpaca.markets/v2/account',
-            headers={
-                'APCA-API-KEY-ID':     os.getenv('ALPACA_API_LIVE_KEY', os.getenv('APCA_API_KEY_ID', '')),
-                'APCA-API-SECRET-KEY': os.getenv('ALPACA_API_SECRET',   os.getenv('APCA_API_SECRET_KEY', '')),
-            },
-            timeout=5,
-        )
-        data = r.json()
-        return float(data.get('cash', data.get('portfolio_value', 100.0)))
+        client = AlpacaClient()
+        account = client.get_account()
+        return float(account.get('cash', account.get('portfolio_value', 100.0)))
     except Exception as e:
         logger.warning(f"Capital fetch failed: {e}")
         return 100.0
@@ -201,25 +191,14 @@ def get_capital() -> float:
 def get_account_state() -> dict:
     """Single call returning capital + options_buying_power."""
     try:
-        r = requests.get(
-            'https://api.alpaca.markets/v2/account',
-            headers={
-                'APCA-API-KEY-ID':     os.getenv('ALPACA_API_LIVE_KEY', os.getenv('APCA_API_KEY_ID', '')),
-                'APCA-API-SECRET-KEY': os.getenv('ALPACA_API_SECRET',   os.getenv('APCA_API_SECRET_KEY', '')),
-            },
-            timeout=5,
-        )
-        data = r.json()
-        cash = float(data.get('cash', 100.0))
-        opts_bp = float(data.get('options_buying_power') or cash)
-        equity  = float(data.get('portfolio_value', cash))
-        return {'capital': cash, 'options_buying_power': opts_bp, 'equity': equity}
+        manager = AccountManager()
+        return manager.get_account_summary()
     except Exception as e:
         logger.warning('get_account_state failed: %s', e)
         return {'capital': 100.0, 'options_buying_power': 100.0, 'equity': 100.0}
 
 def get_options_bp() -> float:
-    return get_account_state()[options_buying_power]
+    return get_account_state()['options_buying_power']
 
 
 # ── Trade execution ────────────────────────────────────────────────────────────
@@ -267,7 +246,6 @@ def execute_signal(sig: Signal, capital: float, ca_sentiment: dict = None, news_
 
     now     = datetime.now(timezone.utc)
     days    = int(sig.expiry_years * 365)
-    from datetime import timedelta
     exp_dt  = now + timedelta(days=days)
     occ_sym = build_occ_symbol(sig.symbol, exp_dt.strftime('%y%m%d'), sig.kind, sig.strike)
 
@@ -419,7 +397,7 @@ def run_cycle():
 
     # ── Refresh news intel during market hours (every 30 min) ──
     try:
-        from options_v1 import news_scanner as _ns_mod
+        from options import news_scanner as _ns_mod
         _ni_path = Path(str(Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent / 'data'))) / 'news_intel.json'))
         _news_age = (time.time() - _ni_path.stat().st_mtime) if _ni_path.exists() else 9999
         if _news_age > 1800:   # older than 30 min
@@ -427,6 +405,34 @@ def run_cycle():
             _ns_mod.run_news_scan(watchlist.get_symbols(), force=True)
     except Exception as _ne:
         logger.debug('[NEWS] Intra-day refresh failed: %s', _ne)
+
+    # ── Refresh contrarian research intel (every 30 min) ──
+    try:
+        from engine.core.contrarian_research import export_contrarian_training_data
+        _data_dir = Path(os.getenv('DATA_DIR', str(Path(__file__).resolve().parent.parent / 'data')))
+        _data_dir.mkdir(exist_ok=True)
+        _contrarian_path = _data_dir / 'contrarian_intel.json'
+        _contrarian_age = (time.time() - _contrarian_path.stat().st_mtime) if _contrarian_path.exists() else 9999
+
+        if _contrarian_age > 1800:   # older than 30 min
+            logger.info('[CONTRARIAN] Refreshing contrarian research intel (age=%.0fm)...', _contrarian_age / 60)
+            symbols = watchlist.get_symbols()[:20]  # Limit to top 20 symbols for performance
+            contrarian_data = export_contrarian_training_data(symbols, str(_contrarian_path))
+
+            # Log key insights for dashboard
+            if contrarian_data['features']:
+                high_boost_symbols = [
+                    f['symbol'] for f in contrarian_data['features']
+                    if f.get('contrarian_strength', 0) > 0.3
+                ]
+                high_risk_symbols = [
+                    f['symbol'] for f in contrarian_data['features']
+                    if f.get('over_consensus_risk', 0) > 0.5
+                ]
+                logger.info('[CONTRARIAN] High boost potential: %s', high_boost_symbols[:5])
+                logger.info('[CONTRARIAN] High consensus risk: %s', high_risk_symbols[:5])
+    except Exception as _ce:
+        logger.debug('[CONTRARIAN] Research intel refresh failed: %s', _ce)
     logger.info(SEP)
     logger.info('CYCLE START | capital=$%.2f | options_bp=$%.2f | equity=$%.2f | paper=%s | %s',
                 capital, opts_bp, equity, PAPER_MODE, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'))
@@ -462,8 +468,7 @@ def run_cycle():
         logger.warning('[RL] Intraday MTM error: %s', e, exc_info=True)
 
     # ── Prune stale pending_signals older than 24h ────────────
-    import time as _rltime
-    _now = _rltime.time()
+    _now = time.time()
     _pending = rl.weights.setdefault('pending_signals', {})
     _stale   = [k for k, v in _pending.items() if _now - v.get('entry_ts', _now) > 86400]
     for k in _stale:
@@ -1029,10 +1034,45 @@ def run_overnight_prep():
     logger.info('=== OVERNIGHT PREP (10-min cycle) ===')
     now = time.time()
 
-    # 1. RL mark-to-market (every 2h)
+    # 1. RL mark-to-market + contrarian learning (every 2h)
     if now - _last_rl_review >= OVERNIGHT_LEARN_SECS:
         reviewed = rl.overnight_review(get_spot)
         logger.info('RL overnight review: %d positions | %s', reviewed, rl.summary())
+
+        # Integrate contrarian research learning
+        try:
+            from engine.core.contrarian_research import export_contrarian_training_data
+            symbols = watchlist.get_symbols()[:10]  # Top 10 for overnight analysis
+            contrarian_data = export_contrarian_training_data(symbols)
+
+            # Feed contrarian patterns to RL system for learning
+            if contrarian_data['features']:
+                contrarian_insights = {
+                    'timestamp': datetime.now().isoformat(),
+                    'symbols_analyzed': len(symbols),
+                    'features_extracted': len(contrarian_data['features']),
+                    'high_boost_count': sum(1 for f in contrarian_data['features'] if f.get('contrarian_strength', 0) > 0.3),
+                    'high_risk_count': sum(1 for f in contrarian_data['features'] if f.get('over_consensus_risk', 0) > 0.5),
+                    'avg_paradigm_shift_potential': sum(f.get('paradigm_shift_potential', 0) for f in contrarian_data['features']) / len(contrarian_data['features'])
+                }
+
+                # Store contrarian insights in RL memory for learning
+                if not hasattr(rl, 'contrarian_memory'):
+                    rl.contrarian_memory = []
+                rl.contrarian_memory.append(contrarian_insights)
+
+                # Keep only last 100 contrarian observations
+                rl.contrarian_memory = rl.contrarian_memory[-100:]
+
+                logger.info('[CONTRARIAN-RL] Learning: %d features, %.1f%% high-boost, %.1f%% high-risk, paradigm potential=%.2f',
+                           contrarian_insights['features_extracted'],
+                           contrarian_insights['high_boost_count'] / max(len(contrarian_data['features']), 1) * 100,
+                           contrarian_insights['high_risk_count'] / max(len(contrarian_data['features']), 1) * 100,
+                           contrarian_insights['avg_paradigm_shift_potential'])
+
+        except Exception as ce:
+            logger.debug('[CONTRARIAN-RL] Learning integration failed: %s', ce)
+
         _last_rl_review = now
     else:
         logger.info('RL review in %.0f min', (OVERNIGHT_LEARN_SECS - (now - _last_rl_review)) / 60)
@@ -1163,8 +1203,8 @@ def run_overnight_prep():
 
     if now - _last_ca_scan >= OVERNIGHT_LEARN_SECS:
         try:
-            from options_v1.calendar import get_upcoming_corporate_actions
-            from options_v1.finbert_sentiment import get_symbol_sentiment
+            from options.calendar import get_upcoming_corporate_actions
+            from engine.data_sources.finbert_sentiment import get_symbol_sentiment
             ca_map = get_upcoming_corporate_actions(symbols, days_ahead=14)
             if ca_map:
                 for sym, actions in ca_map.items():
@@ -1189,7 +1229,7 @@ def run_overnight_prep():
         except Exception:
             pass
 
-        from options_v1.calendar import get_next_open
+        from options.calendar import get_next_open
         next_open = get_next_open()
         if next_open:
             secs = (next_open - datetime.now(timezone.utc)).total_seconds()
@@ -1241,7 +1281,7 @@ def reconcile_positions():
 
 def main():
     global _consecutive_errors
-    logger.info('Options V1 starting. PAPER_MODE=%s', PAPER_MODE)
+    logger.info('Options Trading starting. PAPER_MODE=%s', PAPER_MODE)
     reconcile_positions()
 
     while not _shutdown_event.is_set():
@@ -1265,7 +1305,7 @@ def main():
                 _shutdown_event.wait(timeout=bp)
             else:
                 _shutdown_event.wait(timeout=60)
-    logger.info('[SHUTDOWN] Options V1 bot exited cleanly')
+    logger.info('[SHUTDOWN] Options Trading bot exited cleanly')
 
 
 if __name__ == '__main__':
