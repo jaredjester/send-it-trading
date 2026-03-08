@@ -713,19 +713,13 @@
         primaryType = 'WEAK'; primaryPct = Math.max(boost, paradigm, risk).toFixed(0); primaryColor = 'var(--t2)';
       }
 
-      // Generate tags for significant patterns
+      // Tags based on signal type
       const tags = [];
       if (paradigm > 40) tags.push('<span class="ctag ctag-paradigm">PARADIGM</span>');
-      if (risk > 50) tags.push('<span class="ctag ctag-consensus">CONSENSUS</span>');
-      if (s.citation_pattern_strength > 0.6) tags.push('<span class="ctag ctag-citation">CITATIONS</span>');
+      if (risk > 50) tags.push('<span class="ctag ctag-consensus">DIST</span>');
+      if (s.citation_pattern_strength > 0.6) tags.push('<span class="ctag ctag-citation">POLY✓</span>');
 
-      // Build signal description
-      const patterns = [];
-      if (s.research_quality > 0.7) patterns.push(`High quality research (${(s.research_quality * 100).toFixed(0)}%)`);
-      if (s.divergence_strength > 0.6) patterns.push(`Strong divergence vs consensus`);
-      if (s.citation_pattern_strength > 0.6) patterns.push(`Citation pattern signals timing`);
-
-      const signalDesc = patterns.length > 0 ? patterns.slice(0, 2).join('; ') : 'Analyzing contrarian patterns...';
+      const signalDesc = s.signal_text || 'Analyzing divergence...';
 
       const fillWidth = Math.min(100, Math.max(boost, paradigm, risk));
 
@@ -738,9 +732,9 @@
           <div class="contrarian-sym">${s.symbol}</div>
           <div class="contrarian-signal">${tags.join('')}${signalDesc}</div>
           <div class="contrarian-meta">
-            <span>Quality: ${(s.research_quality * 100).toFixed(0)}%</span>
-            <span>Divergence: ${(s.divergence_strength * 100).toFixed(0)}%</span>
-            <span>Risk: ${risk.toFixed(0)}%</span>
+            <span>Insider: ${s.insider_score >= 0 ? '+' : ''}${(s.insider_score * 100).toFixed(0)}%</span>
+            <span>News: ${s.news_score >= 0 ? '+' : ''}${(s.news_score * 100).toFixed(0)}%</span>
+            <span>Div: ${(s.divergence_strength * 100).toFixed(0)}%</span>
           </div>
           <div class="contrarian-bar">
             <div class="contrarian-fill" style="width:${fillWidth}%;background:${primaryColor}"></div>

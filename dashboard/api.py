@@ -762,108 +762,96 @@ def api_trades():
 
 @app.route('/api/contrarian')
 def api_contrarian():
-    """Get contrarian research signals and insights."""
+    """Contrarian signals derived from insider vs news divergence and polymarket vs momentum gaps."""
     try:
-        contrarian_path = DATA_DIR / 'contrarian_intel.json'
-        if contrarian_path.exists():
-            with open(contrarian_path, 'r') as f:
-                contrarian_data = json.load(f)
+        news_data    = _read_json(NEWS_INTEL) or {}
+        insider_data = _read_json(INSIDER_INTEL) or {}
+        poly_data    = _read_json(POLY_INTEL) or {}
 
-            # Process for dashboard display
-            features = contrarian_data.get('features', [])
-            if not features:
-                return jsonify({'error': 'No contrarian data available', 'signals': []})
+        news_by_sym    = news_data.get('by_symbol', {})
+        insider_by_sym = insider_data.get('by_symbol', {})
+        poly_by_sym    = poly_data.get('by_symbol', {})
 
-            # Aggregate insights by symbol
-            symbol_insights = {}
-            for feature in features:
-                symbol = feature['symbol']
-                if symbol not in symbol_insights:
-                    symbol_insights[symbol] = {
-                        'symbol': symbol,
-                        'sector': feature['sector'],
-                        'contrarian_signals': 0,
-                        'avg_research_quality': 0,
-                        'avg_consensus_strength': 0,
-                        'max_contrarian_strength': 0,
-                        'paradigm_shift_potential': 0,
-                        'over_consensus_risk': 0,
-                        'citation_patterns': [],
-                        'time_horizons': []
-                    }
+        signals = []
+        all_symbols = set(list(news_by_sym.keys()) + list(insider_by_sym.keys()))
 
-                insights = symbol_insights[symbol]
-                insights['contrarian_signals'] += 1
-                insights['avg_research_quality'] += feature['research_quality']
-                insights['avg_consensus_strength'] += feature['consensus_strength']
-                insights['max_contrarian_strength'] = max(
-                    insights['max_contrarian_strength'],
-                    feature['contrarian_strength']
-                )
-                insights['paradigm_shift_potential'] = max(
-                    insights['paradigm_shift_potential'],
-                    feature['paradigm_shift_potential']
-                )
-                insights['over_consensus_risk'] = max(
-                    insights['over_consensus_risk'],
-                    feature['over_consensus_risk']
-                )
+        for symbol in all_symbols:
+            ns = news_by_sym.get(symbol, {})
+            ins = insider_by_sym.get(symbol, {})
+            poly_sigs = poly_by_sym.get(symbol, [])
 
-                # Track citation patterns and time horizons
-                if feature['citation_academic'] > 0.5:
-                    insights['citation_patterns'].append('academic')
-                if feature['citation_policy'] > 0.5:
-                    insights['citation_patterns'].append('policy')
-                if feature['citation_industry'] > 0.5:
-                    insights['citation_patterns'].append('industry')
+            news_score    = float(ns.get('score', 0))        # -1..+1
+            insider_score = float(ins.get('score', 0))       # -1..+1
+            insider_label = ins.get('label', 'neutral')
+            poly_score    = float(poly_sigs[0].get('score', 0)) if poly_sigs else 0.0
 
-                if feature['time_horizon_near'] > 0.5:
-                    insights['time_horizons'].append('near_term')
-                elif feature['time_horizon_medium'] > 0.5:
-                    insights['time_horizons'].append('medium_term')
-                elif feature['time_horizon_long'] > 0.5:
-                    insights['time_horizons'].append('long_term')
+            # Contrarian = divergence between insider (smart money) and news (crowd narrative)
+            divergence = insider_score - news_score           # positive = insider bullish vs bearish news
+            abs_div    = abs(divergence)
 
-            # Finalize averages and rankings
-            for symbol, insights in symbol_insights.items():
-                count = insights['contrarian_signals']
-                insights['avg_research_quality'] /= count
-                insights['avg_consensus_strength'] /= count
-                insights['citation_patterns'] = list(set(insights['citation_patterns']))
-                insights['time_horizons'] = list(set(insights['time_horizons']))
+            if abs_div < 0.25:                                # not enough divergence to be interesting
+                continue
 
-                # Add dashboard-friendly scores
-                insights['boost_potential'] = insights['max_contrarian_strength']
-                insights['risk_level'] = 'HIGH' if insights['over_consensus_risk'] > 0.5 else 'MEDIUM' if insights['over_consensus_risk'] > 0.3 else 'LOW'
-                insights['paradigm_score'] = insights['paradigm_shift_potential']
+            # Boost potential: insiders buying while news is bearish → opportunity
+            boost_potential = max(0.0, divergence)            # 0..1 (only positive divergence = buying opp)
+            over_consensus_risk = max(0.0, -divergence)       # negative divergence = insider selling into hype
 
-            # Sort by contrarian strength
-            sorted_symbols = sorted(
-                symbol_insights.values(),
-                key=lambda x: x['max_contrarian_strength'],
-                reverse=True
-            )
+            # Paradigm signal: poly + insider both diverge from news
+            poly_agreement = 1.0 if (poly_score * insider_score > 0) else 0.0
+            paradigm_shift = boost_potential * 0.7 + poly_agreement * 0.3
 
-            # Summary stats
-            summary = {
-                'total_symbols': len(symbol_insights),
-                'high_boost_symbols': len([s for s in sorted_symbols if s['boost_potential'] > 0.3]),
-                'high_risk_symbols': len([s for s in sorted_symbols if s['over_consensus_risk'] > 0.5]),
-                'paradigm_candidates': len([s for s in sorted_symbols if s['paradigm_score'] > 0.4]),
-                'last_updated': contrarian_data.get('metadata', {}).get('generated_at', 'Unknown'),
-                'data_source': 'Nielsen_2016, Lerner_2014, Enstrom_2017 patterns'
-            }
+            research_quality = min(1.0, (abs(news_score) + abs(insider_score)) / 2 + 0.2)
+            divergence_strength = min(1.0, abs_div)
 
-            return jsonify({
-                'signals': sorted_symbols,
-                'summary': summary,
-                'metadata': contrarian_data.get('metadata', {})
+            # Build signal description
+            if divergence > 0:
+                direction = 'bullish'
+                signal_text = f"Insiders {insider_label} while news is {'bearish' if news_score < 0 else 'neutral'} — smart money diverging from narrative"
+            else:
+                direction = 'bearish'
+                signal_text = f"Insiders {insider_label} while news is {'bullish' if news_score > 0 else 'neutral'} — distribution into strength"
+
+            if poly_sigs and poly_score != 0:
+                poly_dir = 'agrees' if poly_score * insider_score > 0 else 'disagrees'
+                signal_text += f" · Polymarket {poly_dir} ({poly_sigs[0].get('direction','?')})"
+
+            signals.append({
+                'symbol':                symbol,
+                'sector':                ns.get('sector', '—'),
+                'boost_potential':       round(boost_potential, 3),
+                'over_consensus_risk':   round(over_consensus_risk, 3),
+                'paradigm_score':        round(paradigm_shift, 3),
+                'research_quality':      round(research_quality, 3),
+                'divergence_strength':   round(divergence_strength, 3),
+                'citation_pattern_strength': round(poly_agreement, 2),
+                'direction':             direction,
+                'signal_text':           signal_text,
+                'insider_score':         round(insider_score, 3),
+                'news_score':            round(news_score, 3),
+                'contrarian_signals':    1,
             })
-        else:
-            return jsonify({'error': 'Contrarian data not available', 'signals': []})
+
+        # Sort by absolute divergence strength
+        signals.sort(key=lambda x: x['divergence_strength'], reverse=True)
+
+        high_boost = sum(1 for s in signals if s['boost_potential'] > 0.3)
+        paradigm   = sum(1 for s in signals if s['paradigm_score'] > 0.4)
+        high_risk  = sum(1 for s in signals if s['over_consensus_risk'] > 0.3)
+
+        return jsonify({
+            'symbols':     signals[:15],
+            'summary': {
+                'high_boost_symbols':  high_boost,
+                'paradigm_candidates': paradigm,
+                'high_risk_symbols':   high_risk,
+                'total_signals':       len(signals),
+            },
+            'updated_at': news_data.get('scanned_at') or insider_data.get('scanned_at'),
+        })
 
     except Exception as e:
-        return jsonify({'error': f'Failed to load contrarian data: {str(e)}', 'signals': []})
+        app.logger.error("Contrarian endpoint error: %s", e)
+        return jsonify({'error': str(e), 'signals': []})
 
 
 @app.route('/api/positions')
