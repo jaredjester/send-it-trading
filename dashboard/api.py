@@ -956,7 +956,7 @@ def api_stream():
     """Server-Sent Events — pushes live data to the dashboard."""
 
     def _event(name, data):
-        return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+        return f"event: {name}\ndata: {json.dumps(data, cls=_SafeEncoder)}\n\n"
 
     def generate():
         last_portfolio    = 0.0
@@ -1031,7 +1031,7 @@ def api_stream():
             # Signals: on file change
             try:
                 sig_mt = 0.0
-                for fp in (INSIDER_INTEL, RL_WEIGHTS):
+                for fp in (INSIDER_INTEL, RL_WEIGHTS, POLY_INTEL):
                     if fp.exists():
                         sig_mt = max(sig_mt, fp.stat().st_mtime)
                 if sig_mt > 0 and sig_mt != last_sig_mtime:
