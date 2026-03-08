@@ -336,4 +336,4 @@ if __name__ == "__main__":
     engine = DealerFlowEngine()
     r = engine.compute(sym, price)
     for k, v in r.items():
-        print(f"  {k:<18} {v}")
+        logger.info("  {k:<18} {v}")

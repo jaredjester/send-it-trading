@@ -646,15 +646,15 @@ if __name__ == "__main__":
     test_symbols = ["AAPL", "TSLA", "SPY", "QQQ", "NVDA"]
     signals = analyze_options_opportunities(test_symbols)
 
-    print(f"\n=== Enhanced Options Analysis Results ===")
+    logger.info("\n=== Enhanced Options Analysis Results ===")
     for signal in signals:
-        print(f"{signal['symbol']:6s} | Score: {signal['score']:2d} | "
+        logger.info("{signal['symbol']:6s} | Score: {signal['score']:2d} | "
               f"{signal['type']:30s} | {signal['reason']}")
 
     # Test individual contract analysis
     analyzer = EnhancedOptionsAnalyzer()
     contracts = analyzer.get_high_oi_contracts("AAPL", "call", min_oi=100)
-    print(f"\n=== High-OI Call Contracts for AAPL ===")
+    logger.info("\n=== High-OI Call Contracts for AAPL ===")
     for i, contract in enumerate(contracts[:5]):
-        print(f"{i+1}. {contract.option_symbol} | Strike: ${contract.strike:.0f} | "
+        logger.info("{i+1}. {contract.option_symbol} | Strike: ${contract.strike:.0f} | "
               f"OI: {contract.open_interest} | Score: {contract.liquidity_score:.2f}")

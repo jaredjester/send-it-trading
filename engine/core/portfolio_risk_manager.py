@@ -695,33 +695,33 @@ if __name__ == "__main__":
 
     # Test risk analysis
     risk_metrics = risk_manager.analyze_portfolio_risk(sample_positions)
-    print(f"\n=== Portfolio Risk Analysis ===")
-    print(f"Portfolio Beta: {risk_metrics.portfolio_beta:.2f}")
-    print(f"Portfolio Volatility: {risk_metrics.portfolio_volatility:.1%}")
-    print(f"Concentration Risk: {risk_metrics.concentration_risk:.2f}")
-    print(f"Max Sector Weight: {risk_metrics.max_sector_weight:.1%}")
-    print(f"Total Positions: {risk_metrics.total_positions}")
+    logger.info("\n=== Portfolio Risk Analysis ===")
+    logger.info("Portfolio Beta: {risk_metrics.portfolio_beta:.2f}")
+    logger.info("Portfolio Volatility: {risk_metrics.portfolio_volatility:.1%}")
+    logger.info("Concentration Risk: {risk_metrics.concentration_risk:.2f}")
+    logger.info("Max Sector Weight: {risk_metrics.max_sector_weight:.1%}")
+    logger.info("Total Positions: {risk_metrics.total_positions}")
 
     # Test sector allocation
     sector_allocations = risk_manager.get_sector_allocation_analysis(sample_positions)
-    print(f"\n=== Sector Allocation ===")
+    logger.info("\n=== Sector Allocation ===")
     for allocation in sector_allocations:
-        print(f"{allocation.sector:20s}: {allocation.weight:6.1%} "
+        logger.info("{allocation.sector:20s}: {allocation.weight:6.1%} "
               f"(target: {allocation.target_weight:6.1%}, "
               f"diff: {allocation.over_under:+6.1%})")
 
     # Test position risk check
     risk_check = risk_manager.check_position_risk_limits("GOOGL", 8000, sample_positions)
-    print(f"\n=== Position Risk Check (GOOGL, $8000) ===")
-    print(f"Approved: {risk_check['approved']}")
-    print(f"Recommended Allocation: ${risk_check['recommended_allocation']:.0f}")
+    logger.info("\n=== Position Risk Check (GOOGL, $8000) ===")
+    logger.info("Approved: {risk_check['approved']}")
+    logger.info("Recommended Allocation: ${risk_check['recommended_allocation']:.0f}")
     if risk_check["violations"]:
-        print(f"Violations: {risk_check['violations']}")
+        logger.info("Violations: {risk_check['violations']}")
     if risk_check["warnings"]:
-        print(f"Warnings: {risk_check['warnings']}")
+        logger.info("Warnings: {risk_check['warnings']}")
 
     # Test rebalancing recommendations
     recommendations = risk_manager.generate_rebalancing_recommendations(sample_positions)
-    print(f"\n=== Rebalancing Recommendations ===")
+    logger.info("\n=== Rebalancing Recommendations ===")
     for rec in recommendations:
-        print(f"{rec['type']:20s}: {rec['action']} (Priority: {rec.get('priority', 'N/A')})")
+        logger.info("{rec['type']:20s}: {rec['action']} (Priority: {rec.get('priority', 'N/A')})")

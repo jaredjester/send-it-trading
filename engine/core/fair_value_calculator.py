@@ -607,20 +607,20 @@ if __name__ == "__main__":
     test_symbols = ["AAPL", "JNJ", "XOM", "REIT", "BRK-B"]
     calculator = FairValueCalculator()
 
-    print(f"\n=== Fair Value Analysis Results ===")
+    logger.info("\n=== Fair Value Analysis Results ===")
     for symbol in test_symbols:
         try:
             result = calculator.calculate_fair_value(symbol)
-            print(f"{symbol:6s} | Current: ${result.current_price:7.2f} | "
+            logger.info("{symbol:6s} | Current: ${result.current_price:7.2f} | "
                   f"Fair Value: ${result.fair_value:7.2f} | "
                   f"Discount: {result.discount_to_fair_value:+6.1f}% | "
                   f"Confidence: {result.confidence_score:.2f} | "
                   f"Methods: {result.methods_used}")
         except Exception as e:
-            print(f"{symbol:6s} | Error: {e}")
+            logger.info("{symbol:6s} | Error: {e}")
 
     # Test signal generation
     signals = calculator.get_valuation_signals(test_symbols)
-    print(f"\n=== Undervalued Opportunities ===")
+    logger.info("\n=== Undervalued Opportunities ===")
     for signal in signals:
-        print(f"{signal['symbol']:6s} | Score: {signal['score']:2d} | {signal['reason']}")
+        logger.info("{signal['symbol']:6s} | Score: {signal['score']:2d} | {signal['reason']}")
