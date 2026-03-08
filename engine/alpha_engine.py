@@ -19,23 +19,12 @@ import numpy as np
 import pandas as pd
 import requests
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
 from core.dynamic_config import cfg as _cfg
 
 logger = logging.getLogger('alpha_engine')
-
-# Lazy-load DealerFlowEngine to avoid import-time API calls
-_dealer_flow_engine = None
-
-def _dealer_flow() -> object:
-    global _dealer_flow_engine
-    if _dealer_flow_engine is None:
-        try:
-            from core.dealer_flow import DealerFlowEngine
-            _dealer_flow_engine = DealerFlowEngine()
-        except Exception as e:
-            logger.warning(f"DealerFlowEngine unavailable: {e}")
-            _dealer_flow_engine = None
-    return _dealer_flow_engine
 
 
 class AlphaEngine:
@@ -126,7 +115,7 @@ class AlphaEngine:
         url = f"{self.data_url}/v2/stocks/{symbol}/bars"
         
         # Retry logic
-        for attempt in range(self.config['data']['retry_attempts']):
+        for attempt in range(int(self.config['data']['retry_attempts'])):
             try:
                 response = requests.get(url, headers=self.headers, params=params, timeout=10)
                 response.raise_for_status()
@@ -507,38 +496,7 @@ class AlphaEngine:
         mean_rev = self._mean_reversion_score(bars)
         momentum = self._momentum_score(bars)
         sentiment = self._sentiment_enhanced_score(bars, sentiment_score)
-
-        # ── Dealer Flow signals ──────────────────────────────────────────
-        dealer_signals = {}
-        dealer_boost = 0.0
-        dealer_bias = "neutral"
-        spot = float(bars[-1].get("c", bars[-1].get("close", 0))) if bars else 0.0
-        if spot > 0:
-            df_engine = _dealer_flow()
-            if df_engine is not None:
-                try:
-                    dealer_signals = df_engine.compute(symbol, spot)
-                    gex_n = dealer_signals.get("gex_norm", 0.0)
-                    vex_n = dealer_signals.get("vex_norm", 0.0)
-                    charm_n = dealer_signals.get("charm_norm", 0.0)
-                    iv_rank = dealer_signals.get("iv_rank", 50.0)
-                    dealer_bias = dealer_signals.get("strategy_bias", "neutral")
-
-                    # Score boost: +0-8 points based on dealer alignment
-                    # GEX negative + momentum = extra boost for directional plays
-                    # IV rank <20 = cheap vol, boost buy signals
-                    # IV rank >80 = rich vol, penalise buying
-                    dealer_boost = (
-                        gex_n * 0.4          # GEX alignment
-                        + vex_n * 0.2        # Vanna tail
-                        + charm_n * 0.1      # Charm drift
-                        + (25 - iv_rank) * 0.05 if iv_rank < 30 else  # Cheap vol bonus
-                        (iv_rank - 70) * -0.05 if iv_rank > 70 else 0  # Expensive vol penalty
-                    )
-                    dealer_boost = max(-8.0, min(8.0, dealer_boost))
-                except Exception as e:
-                    logger.debug(f"DealerFlow compute failed {symbol}: {e}")
-
+        
         # Weighted combination
         weights = {
             "mean_reversion": self.config['mean_reversion']['score_weight'],
@@ -552,10 +510,8 @@ class AlphaEngine:
         weighted_score = (
             mean_rev['score'] * weights['mean_reversion'] +
             momentum['score'] * weights['momentum'] +
-            abs(sentiment_contribution) +  # Use absolute value for total score
-            dealer_boost  # Dealer flow adjustment
+            abs(sentiment_contribution)  # Use absolute value for total score
         )
-        weighted_score = max(0.0, min(100.0, weighted_score))
         
         # Determine dominant strategy
         scores_dict = {
@@ -579,14 +535,6 @@ class AlphaEngine:
             # Default to mean reversion if no strategy is clearly active
             params = mean_rev
             position_type = "hold"
-
-        # Override position_type based on dealer strategy_bias
-        if dealer_bias == "buy_directional":
-            position_type = "swing"
-        elif dealer_bias == "sell_premium":
-            position_type = "scalp"
-        elif dealer_bias == "buy_vol":
-            position_type = "swing"
         
         # Calculate confidence (0-1)
         confidence = min(weighted_score / 100, 1.0)
@@ -615,19 +563,7 @@ class AlphaEngine:
             "signals": {
                 "mean_reversion": mean_rev['signals'],
                 "momentum": momentum['signals'],
-                "sentiment": sentiment['signals'],
-                "dealer_flow": {
-                    "gex_norm": dealer_signals.get("gex_norm", 0),
-                    "vex_norm": dealer_signals.get("vex_norm", 0),
-                    "charm_norm": dealer_signals.get("charm_norm", 0),
-                    "iv_rank": dealer_signals.get("iv_rank", 50),
-                    "gamma_flip": dealer_signals.get("gamma_flip"),
-                    "above_flip": dealer_signals.get("above_flip", False),
-                    "vrp": dealer_signals.get("vrp", 0),
-                    "regime": dealer_signals.get("regime", "neutral"),
-                    "strategy_bias": dealer_signals.get("strategy_bias", "neutral"),
-                    "boost_applied": round(dealer_boost, 2),
-                }
+                "sentiment": sentiment['signals']
             },
             "confidence": confidence,
             "suggested_action": suggested_action,

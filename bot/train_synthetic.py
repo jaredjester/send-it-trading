@@ -42,57 +42,8 @@ MARKET_PARAMS = {
     'COIN': (0.10, 0.80, 0.90),
 }
 
-# ── BS helpers (self-contained, no imports from options_v1) ────────────────────
-def _norm_cdf(x):
-    import math
-    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
-
-def _norm_pdf(x):
-    import math
-    return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
-
-def bs_price(kind, S, K, T, r, sigma):
-    if T <= 0 or sigma <= 0:
-        if kind == 'call': return max(0.0, S - K)
-        return max(0.0, K - S)
-    try:
-        d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-        d2 = d1 - sigma * math.sqrt(T)
-        if kind == 'call':
-            return S * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2)
-        return K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
-    except (ValueError, ZeroDivisionError):
-        return 0.0
-
-def bs_delta(kind, S, K, T, r, sigma):
-    if T <= 0 or sigma <= 0:
-        return (1.0 if S > K else 0.0) if kind == 'call' else (-1.0 if S < K else 0.0)
-    try:
-        d1 = (math.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * math.sqrt(T))
-        return _norm_cdf(d1) if kind == 'call' else _norm_cdf(d1) - 1.0
-    except (ValueError, ZeroDivisionError):
-        return 0.0
-
-# ── GBM price path ─────────────────────────────────────────────────────────────
-def gbm_path(S0, mu, sigma, T_years, steps):
-    """Returns list of prices of length steps+1."""
-    dt = T_years / steps
-    prices = [S0]
-    for _ in range(steps):
-        z = random.gauss(0, 1)
-        prices.append(prices[-1] * math.exp((mu - 0.5 * sigma**2) * dt + sigma * math.sqrt(dt) * z))
-    return prices
-
-# ── Stochastic vol (simple mean-reverting IV path) ────────────────────────────
-def iv_path(iv0, steps, kappa=2.0, theta=None, xi=0.3):
-    """Heston-style mean-reverting IV."""
-    theta = theta or iv0
-    dt = 1.0 / 252 / steps
-    ivs = [iv0]
-    for _ in range(steps):
-        dv = kappa * (theta - ivs[-1]) * dt + xi * ivs[-1] * math.sqrt(dt) * random.gauss(0, 1)
-        ivs.append(max(0.05, ivs[-1] + dv))
-    return ivs
+# ── BS helpers (consolidated in engine/core/pricing.py) ────────────────────
+from engine.core.pricing import bs_price, bs_delta, gbm_path, iv_path
 
 # ── Single episode ─────────────────────────────────────────────────────────────
 def run_episode(symbol, S0, mu, sigma, iv0, r=0.045, dte=21, kind='call'):
@@ -174,11 +125,11 @@ def train(episodes, symbols, weights_path, checkpoint_every=500):
         log.info('Loaded existing weights from %s', wpath)
     else:
         weights = {
-            'kelly_scale':  {'DCVX': 1.0, 'VRP': 1.0},
-            'ev_threshold': {'DCVX': 0.0, 'VRP': 0.0},
-            'win_rate':     {'DCVX': 0.5, 'VRP': 0.5},
-            'n_trades':     {'DCVX': 0.0, 'VRP': 0.0},
-            'total_pnl':    {'DCVX': 0.0, 'VRP': 0.0},
+            'kelly_scale':  {'DCVX': 1.0},
+            'ev_threshold': {'DCVX': 0.0},
+            'win_rate':     {'DCVX': 0.5},
+            'n_trades':     {'DCVX': 0.0},
+            'total_pnl':    {'DCVX': 0.0},
         }
 
     wins = losses = skipped = 0

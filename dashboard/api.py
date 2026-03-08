@@ -304,7 +304,7 @@ def _log_last_line(log_path, skip_separators=True):
 
 
 def _build_plan_display(p):
-    """Build display dict for a plan (works with both v1 and v2 formats)."""
+    """Build display dict for a plan (works with different plan formats)."""
     ep = p.get('entry_price', 0) or 0
     tp = p.get('target_price', 0) or 0
     sp = p.get('stop_price', 0) or 0
@@ -375,12 +375,12 @@ def _load_plans():
     # Engine plans (strategy_v2 options-first)
     plans = db.get_positions()
     seen_ids = {p.get('id') for p in plans if p.get('id')}
-    # Bot plans (options_v1 DCVX) — skip any already present in engine file
+    # Bot plans (options DCVX) — skip any already present in engine file
     for p in _read_jsonl(DATA_DIR / 'trade_plans.jsonl'):
         pid = p.get('plan_id')
         if pid and pid in seen_ids:
             continue
-        p.setdefault('strategy', 'options_v1_dcvx')
+        p.setdefault('strategy', 'options_dcvx')
         plans.append(p)
         if pid:
             seen_ids.add(pid)
@@ -494,6 +494,40 @@ def _load_signals():
                     'events': ca_entry.get('events', []),
                 }
         syms[sym] = entry
+
+    # Add VWAP signals
+    try:
+        from engine.indicators.vwap_calculator import VWAPCalculator
+        vwap_calc = VWAPCalculator()
+        for sym in syms:
+            try:
+                vwap_data = vwap_calc.calculate_vwap(sym)
+                if vwap_data:
+                    # Use the built-in signal strength
+                    signal_strength = vwap_data.signal_strength
+
+                    # Calculate bands position (if bands exist)
+                    bands_position = 0.0
+                    if vwap_data.upper_band and vwap_data.lower_band:
+                        band_range = vwap_data.upper_band - vwap_data.lower_band
+                        if band_range > 0:
+                            bands_position = (vwap_data.current_price - vwap_data.lower_band) / band_range
+
+                    syms[sym]['vwap'] = {
+                        'signal_strength': round(signal_strength, 3),
+                        'deviation': round(vwap_data.vwap_deviation, 3),
+                        'volume_ratio': round(vwap_data.volume_ratio or 1.0, 3),
+                        'bands_position': round(bands_position, 3),
+                        'signal': vwap_data.vwap_signal,
+                        'vwap': round(vwap_data.vwap, 2),
+                        'current_price': round(vwap_data.current_price, 2)
+                    }
+            except Exception as e:
+                # Skip VWAP for this symbol if calculation fails
+                pass
+    except ImportError:
+        # VWAP calculator not available
+        pass
 
     out = {'symbols': syms, 'rl_ic': rl_ic, 'ic_obs_counts': ic_obs}
 
@@ -705,6 +739,112 @@ def api_trades():
     return jsonify(_load_trades())
 
 
+@app.route('/api/contrarian')
+def api_contrarian():
+    """Get contrarian research signals and insights."""
+    try:
+        contrarian_path = DATA_DIR / 'contrarian_intel.json'
+        if contrarian_path.exists():
+            with open(contrarian_path, 'r') as f:
+                contrarian_data = json.load(f)
+
+            # Process for dashboard display
+            features = contrarian_data.get('features', [])
+            if not features:
+                return jsonify({'error': 'No contrarian data available', 'signals': []})
+
+            # Aggregate insights by symbol
+            symbol_insights = {}
+            for feature in features:
+                symbol = feature['symbol']
+                if symbol not in symbol_insights:
+                    symbol_insights[symbol] = {
+                        'symbol': symbol,
+                        'sector': feature['sector'],
+                        'contrarian_signals': 0,
+                        'avg_research_quality': 0,
+                        'avg_consensus_strength': 0,
+                        'max_contrarian_strength': 0,
+                        'paradigm_shift_potential': 0,
+                        'over_consensus_risk': 0,
+                        'citation_patterns': [],
+                        'time_horizons': []
+                    }
+
+                insights = symbol_insights[symbol]
+                insights['contrarian_signals'] += 1
+                insights['avg_research_quality'] += feature['research_quality']
+                insights['avg_consensus_strength'] += feature['consensus_strength']
+                insights['max_contrarian_strength'] = max(
+                    insights['max_contrarian_strength'],
+                    feature['contrarian_strength']
+                )
+                insights['paradigm_shift_potential'] = max(
+                    insights['paradigm_shift_potential'],
+                    feature['paradigm_shift_potential']
+                )
+                insights['over_consensus_risk'] = max(
+                    insights['over_consensus_risk'],
+                    feature['over_consensus_risk']
+                )
+
+                # Track citation patterns and time horizons
+                if feature['citation_academic'] > 0.5:
+                    insights['citation_patterns'].append('academic')
+                if feature['citation_policy'] > 0.5:
+                    insights['citation_patterns'].append('policy')
+                if feature['citation_industry'] > 0.5:
+                    insights['citation_patterns'].append('industry')
+
+                if feature['time_horizon_near'] > 0.5:
+                    insights['time_horizons'].append('near_term')
+                elif feature['time_horizon_medium'] > 0.5:
+                    insights['time_horizons'].append('medium_term')
+                elif feature['time_horizon_long'] > 0.5:
+                    insights['time_horizons'].append('long_term')
+
+            # Finalize averages and rankings
+            for symbol, insights in symbol_insights.items():
+                count = insights['contrarian_signals']
+                insights['avg_research_quality'] /= count
+                insights['avg_consensus_strength'] /= count
+                insights['citation_patterns'] = list(set(insights['citation_patterns']))
+                insights['time_horizons'] = list(set(insights['time_horizons']))
+
+                # Add dashboard-friendly scores
+                insights['boost_potential'] = insights['max_contrarian_strength']
+                insights['risk_level'] = 'HIGH' if insights['over_consensus_risk'] > 0.5 else 'MEDIUM' if insights['over_consensus_risk'] > 0.3 else 'LOW'
+                insights['paradigm_score'] = insights['paradigm_shift_potential']
+
+            # Sort by contrarian strength
+            sorted_symbols = sorted(
+                symbol_insights.values(),
+                key=lambda x: x['max_contrarian_strength'],
+                reverse=True
+            )
+
+            # Summary stats
+            summary = {
+                'total_symbols': len(symbol_insights),
+                'high_boost_symbols': len([s for s in sorted_symbols if s['boost_potential'] > 0.3]),
+                'high_risk_symbols': len([s for s in sorted_symbols if s['over_consensus_risk'] > 0.5]),
+                'paradigm_candidates': len([s for s in sorted_symbols if s['paradigm_score'] > 0.4]),
+                'last_updated': contrarian_data.get('metadata', {}).get('generated_at', 'Unknown'),
+                'data_source': 'Nielsen_2016, Lerner_2014, Enstrom_2017 patterns'
+            }
+
+            return jsonify({
+                'signals': sorted_symbols,
+                'summary': summary,
+                'metadata': contrarian_data.get('metadata', {})
+            })
+        else:
+            return jsonify({'error': 'Contrarian data not available', 'signals': []})
+
+    except Exception as e:
+        return jsonify({'error': f'Failed to load contrarian data: {str(e)}', 'signals': []})
+
+
 @app.route('/api/positions')
 def api_positions():
     """Dedicated positions endpoint — returns enriched list from Alpaca."""
@@ -773,65 +913,6 @@ def api_gex():
         'gex': data,
         'summary': {'squeeze_active': squeeze, 'regimes': regimes, 'total_symbols': len(data)}
     })
-
-
-@app.route('/api/dealer_flow')
-def api_dealer_flow():
-    """Live dealer-flow signals: GEX, VEX, Charm, IV Rank, Gamma Flip per symbol."""
-    import sys, os
-    sys.path.insert(0, str(Path(__file__).parent.parent / 'engine'))
-    try:
-        from core.dealer_flow import DealerFlowEngine
-        import alpaca_env
-        alpaca_env.bootstrap()
-
-        # Use watchlist symbols (default to liquid tickers)
-        symbols = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META']
-        engine = DealerFlowEngine()
-
-        # Get spot prices from Alpaca
-        data_base = os.getenv('ALPACA_DATA_BASE', 'https://data.alpaca.markets')
-        headers = {
-            'APCA-API-KEY-ID': os.getenv('APCA_API_KEY_ID', ''),
-            'APCA-API-SECRET-KEY': os.getenv('APCA_API_SECRET_KEY', ''),
-        }
-        spots_resp = requests.get(
-            f'{data_base}/v2/stocks/snapshots',
-            headers=headers,
-            params={'symbols': ','.join(symbols)},
-            timeout=10
-        )
-        spots = {}
-        if spots_resp.ok:
-            for sym, snap in spots_resp.json().items():
-                latest = snap.get('latestTrade') or snap.get('latestQuote') or {}
-                price = latest.get('p') or latest.get('ap') or 0.0
-                spots[sym] = float(price)
-
-        results = {}
-        for sym in symbols:
-            spot = spots.get(sym, 0.0)
-            if spot > 0:
-                results[sym] = engine.compute(sym, spot)
-                results[sym]['spot'] = spot
-
-        # Market-wide GEX summary
-        gex_values = [v['gex_norm'] for v in results.values() if 'gex_norm' in v]
-        avg_gex = sum(gex_values) / max(len(gex_values), 1)
-        dominant_regime = 'positive_gex' if avg_gex > 0 else 'negative_gex'
-
-        return jsonify({
-            'symbols': results,
-            'market_summary': {
-                'avg_gex_norm': round(avg_gex, 2),
-                'dominant_regime': dominant_regime,
-                'above_flip_count': sum(1 for v in results.values() if v.get('above_flip')),
-                'symbols_computed': len(results),
-            },
-            'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z',
-        })
-    except Exception as e:
-        return jsonify({'error': str(e), 'symbols': {}}), 500
 
 
 # ─── SSE Stream ─────────────────────────────────────────────────────────────

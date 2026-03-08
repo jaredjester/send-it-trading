@@ -9,7 +9,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.config import load_config
+from core.dynamic_config import cfg
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,12 @@ def size_position(
     active_positions: int = 0,
 ) -> dict[str, Any]:
     cfg = config or KellyConfig()
-    kc = load_config().get("kelly_sizing", {})
+    kc = {
+        "fractional": cfg("kelly_fractional", 0.25),
+        "max_position_pct": cfg("kelly_max_position_pct", 0.05),
+        "min_position_pct": cfg("kelly_min_position_pct", 0.01),
+        "max_leverage": cfg("kelly_max_leverage", 2.0),
+    }
     cfg = KellyConfig(
         fractional=kc.get("fractional", cfg.fractional),
         max_position_pct=kc.get("max_position_pct", cfg.max_position_pct),
