@@ -775,6 +775,65 @@ def api_gex():
     })
 
 
+@app.route('/api/dealer_flow')
+def api_dealer_flow():
+    """Live dealer-flow signals: GEX, VEX, Charm, IV Rank, Gamma Flip per symbol."""
+    import sys, os
+    sys.path.insert(0, str(Path(__file__).parent.parent / 'engine'))
+    try:
+        from core.dealer_flow import DealerFlowEngine
+        import alpaca_env
+        alpaca_env.bootstrap()
+
+        # Use watchlist symbols (default to liquid tickers)
+        symbols = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META']
+        engine = DealerFlowEngine()
+
+        # Get spot prices from Alpaca
+        data_base = os.getenv('ALPACA_DATA_BASE', 'https://data.alpaca.markets')
+        headers = {
+            'APCA-API-KEY-ID': os.getenv('APCA_API_KEY_ID', ''),
+            'APCA-API-SECRET-KEY': os.getenv('APCA_API_SECRET_KEY', ''),
+        }
+        spots_resp = requests.get(
+            f'{data_base}/v2/stocks/snapshots',
+            headers=headers,
+            params={'symbols': ','.join(symbols)},
+            timeout=10
+        )
+        spots = {}
+        if spots_resp.ok:
+            for sym, snap in spots_resp.json().items():
+                latest = snap.get('latestTrade') or snap.get('latestQuote') or {}
+                price = latest.get('p') or latest.get('ap') or 0.0
+                spots[sym] = float(price)
+
+        results = {}
+        for sym in symbols:
+            spot = spots.get(sym, 0.0)
+            if spot > 0:
+                results[sym] = engine.compute(sym, spot)
+                results[sym]['spot'] = spot
+
+        # Market-wide GEX summary
+        gex_values = [v['gex_norm'] for v in results.values() if 'gex_norm' in v]
+        avg_gex = sum(gex_values) / max(len(gex_values), 1)
+        dominant_regime = 'positive_gex' if avg_gex > 0 else 'negative_gex'
+
+        return jsonify({
+            'symbols': results,
+            'market_summary': {
+                'avg_gex_norm': round(avg_gex, 2),
+                'dominant_regime': dominant_regime,
+                'above_flip_count': sum(1 for v in results.values() if v.get('above_flip')),
+                'symbols_computed': len(results),
+            },
+            'timestamp': __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'symbols': {}}), 500
+
+
 # ─── SSE Stream ─────────────────────────────────────────────────────────────
 @app.route('/api/stream')
 def api_stream():
