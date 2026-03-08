@@ -16,6 +16,7 @@ entry/exit decisions and position sizing in the trading bot.
 """
 
 import logging
+import os
 import requests
 import json
 import statistics
@@ -81,6 +82,41 @@ class FairValueCalculator:
         self.required_return = _cfg("valuation.required_return", 0.12)  # 12%
         self.growth_rate = _cfg("valuation.conservative_growth", 0.02)  # 2%
         self.safety_margin = _cfg("valuation.safety_margin", 0.15)  # 15% discount
+
+
+    def _fmp_fundamentals(self, symbol: str) -> dict:
+        """Fetch fundamentals from FMP (PE, EPS, price, market cap, growth)."""
+        api_key = os.getenv("FMP_API_KEY", "")
+        if not api_key:
+            return {}
+        try:
+            base = "https://financialmodelingprep.com/stable"
+            import requests as _r
+            # Get income statement (EPS, revenue growth)
+            inc = _r.get(f"{base}/income-statement?symbol={symbol}&limit=2&apikey={api_key}", timeout=8).json()
+            # Get profile (PE ratio, price, market cap, beta)
+            prof = _r.get(f"{base}/profile?symbol={symbol}&apikey={api_key}", timeout=8).json()
+            result = {}
+            if prof and isinstance(prof, list):
+                p = prof[0]
+                result["price"]      = float(p.get("price", 0))
+                result["pe_ratio"]   = float(p.get("pe", 0) or 0)
+                result["beta"]       = float(p.get("beta", 1) or 1)
+                result["sector"]     = p.get("sector", "")
+                result["market_cap"] = float(p.get("mktCap", 0) or 0)
+            if inc and isinstance(inc, list) and len(inc) >= 1:
+                i0 = inc[0]
+                result["eps"]       = float(i0.get("eps", 0) or 0)
+                result["revenue"]   = float(i0.get("revenue", 0) or 0)
+                if len(inc) >= 2:
+                    i1 = inc[1]
+                    rev0 = float(i0.get("revenue", 0) or 0)
+                    rev1 = float(i1.get("revenue", 1) or 1)
+                    result["revenue_growth"] = (rev0 - rev1) / rev1 if rev1 else 0
+            return result
+        except Exception as e:
+            logger.debug("FMP fundamentals fetch failed for %s: %s", symbol, e)
+            return {}
 
     def calculate_fair_value(self, symbol: str) -> ValuationResult:
         """
@@ -185,8 +221,45 @@ class FairValueCalculator:
             return self._create_default_result(symbol, 0)
 
     def _get_stock_data(self, symbol: str) -> Tuple[Dict, Dict]:
-        """Get stock data with multiple fallback sources."""
-        # Try yfinance first if available
+        """Get stock data — FMP first, yfinance fallback, static fallback last."""
+        # 1. Try FMP (accurate real data, no rate limits on basic tier)
+        fmp = self._fmp_fundamentals(symbol)
+        if fmp.get("price", 0) > 0 and fmp.get("eps", 0) != 0:
+            try:
+                # Get 52w high/low from FMP historical data
+                api_key = os.getenv("FMP_API_KEY", "")
+                import requests as _r
+                hist_resp = _r.get(
+                    f"https://financialmodelingprep.com/stable/historical-price-eod/full"
+                    f"?symbol={symbol}&limit=252&apikey={api_key}", timeout=8
+                ).json()
+                prices = [float(d["close"]) for d in (hist_resp if isinstance(hist_resp, list) else []) if d.get("close")]
+                current_price = fmp["price"]
+                info_data = {
+                    "sector":        fmp.get("sector", "Unknown"),
+                    "market_cap":    fmp.get("market_cap"),
+                    "pe_ratio":      fmp.get("pe_ratio"),
+                    "peg_ratio":     None,
+                    "pb_ratio":      None,
+                    "dividend_yield": None,
+                    "eps":           fmp.get("eps"),
+                    "book_value":    None,
+                    "revenue":       fmp.get("revenue"),
+                    "revenue_growth": fmp.get("revenue_growth"),
+                    "profit_margin": None,
+                }
+                history_data = {
+                    "current_price": current_price,
+                    "high_52w":      max(prices) if prices else current_price * 1.3,
+                    "low_52w":       min(prices) if prices else current_price * 0.7,
+                    "volume":        0,
+                    "price_history": prices or [current_price],
+                }
+                return info_data, history_data
+            except Exception as e:
+                logger.debug("FMP full data fetch failed for %s: %s", symbol, e)
+
+        # 2. Try yfinance fallback
         if HAS_YFINANCE:
             try:
                 ticker = yf.Ticker(symbol)
