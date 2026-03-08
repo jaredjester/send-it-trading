@@ -87,57 +87,115 @@ class EnhancedFinvizScanner:
         logger.info(f"High volume scan: {len(results)} opportunities")
         return results
 
-    def scan_congressional_trades(self) -> List[Dict]:
+    def scan_congressional_trades(self, symbols: List[str] = None) -> List[Dict]:
         """
         Track congressional trading activity (Senate/House) as contrarian/momentum signals.
-        Recent politician trades often precede significant price movements.
+        Uses real House STOCK Act PTR data via CongressionalTradesScanner.
+
+        Args:
+            symbols: Optional list of symbols to filter. If None, returns all recent signals.
         """
         results = []
 
-        # Scan both Senate and House trading
-        for endpoint, label in [("senator-trading", "Senate"), ("house-rep-trading", "House")]:
-            data = self._make_request(endpoint)
-            if not data:
-                continue
+        try:
+            import sys as _sys
+            from pathlib import Path as _Path
+            _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+            from data_sources.congressional_trades import CongressionalTradesScanner
 
-            trades = data if isinstance(data, list) else data.get("trades", [])
-            max_per_house = int(_cfg("finviz.max_congressional_per_house", 5))
+            scanner = CongressionalTradesScanner()
 
-            for trade in trades[:max_per_house]:
-                symbol = trade.get("ticker", "").strip()
-                if not symbol:
-                    continue
+            if symbols:
+                # Get signals for specific symbols
+                signals = scanner.get_signals_for_symbols(symbols)
+                for symbol, sig in signals.items():
+                    if sig["signal"] == "neutral" and sig["purchase_count"] == 0 and sig["sale_count"] == 0:
+                        continue
 
-                trade_type = trade.get("transaction", "").lower()
-                amount = trade.get("amount", "")
-                politician = trade.get("representative", trade.get("senator", "Unknown"))
-                trade_date = trade.get("transaction_date", "")
+                    is_bullish = sig["signal"] == "bullish"
+                    base_score = 70 if is_bullish else 60
 
-                # Score based on trade type and recency
-                base_score = 68 if "buy" in trade_type.lower() else 62
-
-                # Boost score for recent trades (within 7 days)
-                try:
-                    trade_dt = datetime.strptime(trade_date, "%Y-%m-%d")
-                    days_ago = (datetime.now() - trade_dt).days
-                    if days_ago <= 7:
+                    # Boost for notable politicians
+                    if sig.get("notable_politicians"):
                         base_score += 5
-                    elif days_ago <= 30:
-                        base_score += 2
-                except:
-                    pass
 
-                results.append({
-                    "symbol": symbol,
-                    "score": base_score,
-                    "type": "finviz_congressional",
-                    "reason": f"{label} {trade_type}: {politician} ({amount})",
-                    "politician": politician,
-                    "trade_type": trade_type,
-                    "amount": amount,
-                    "trade_date": trade_date,
-                    "house": label.lower()
-                })
+                    # Boost for high-value trades
+                    if sig.get("total_min_value", 0) >= 1_000_000:
+                        base_score += 5
+                    elif sig.get("total_min_value", 0) >= 250_000:
+                        base_score += 2
+
+                    # Recency boost
+                    last_date = sig.get("last_trade_date", "")
+                    if last_date:
+                        try:
+                            days_ago = (datetime.now() - datetime.strptime(last_date, "%Y-%m-%d")).days
+                            if days_ago <= 7:
+                                base_score += 5
+                            elif days_ago <= 30:
+                                base_score += 2
+                        except ValueError:
+                            pass
+
+                    trade_type = "purchase" if is_bullish else "sale"
+                    notable_str = ", ".join(sig["notable_politicians"][:2]) if sig["notable_politicians"] else "Congress"
+                    results.append({
+                        "symbol": symbol,
+                        "score": min(base_score, 85),
+                        "type": "finviz_congressional",
+                        "reason": f"Congressional {trade_type}: {notable_str} (P:{sig['purchase_count']} S:{sig['sale_count']})",
+                        "politician": notable_str,
+                        "trade_type": trade_type,
+                        "amount": sig.get("total_min_value", 0),
+                        "trade_date": last_date,
+                        "house": "house",
+                        "net_sentiment": sig.get("net_sentiment", 0.0),
+                    })
+            else:
+                # Get all recent trades and convert to scan results
+                all_trades = scanner.get_trades(days_back=30)
+                seen_symbols: set = set()
+                for trade in all_trades:
+                    symbol = trade.get("symbol", "")
+                    if not symbol or symbol in seen_symbols:
+                        continue
+                    seen_symbols.add(symbol)
+
+                    is_purchase = trade["transaction_type"] == "purchase"
+                    base_score = 68 if is_purchase else 62
+
+                    # Notable politician boost
+                    pol_lower = trade.get("politician", "").lower()
+                    if any(k in pol_lower for k in ("pelosi", "tuberville", "burr")):
+                        base_score += 5
+
+                    # Recency boost
+                    trade_date = trade.get("trade_date", "")
+                    if trade_date:
+                        try:
+                            days_ago = (datetime.now() - datetime.strptime(trade_date, "%Y-%m-%d")).days
+                            if days_ago <= 7:
+                                base_score += 5
+                            elif days_ago <= 30:
+                                base_score += 2
+                        except ValueError:
+                            pass
+
+                    amount_str = f"${trade.get('amount_min', 0):,} - ${trade.get('amount_max', 0):,}"
+                    results.append({
+                        "symbol": symbol,
+                        "score": min(base_score, 85),
+                        "type": "finviz_congressional",
+                        "reason": f"House {trade['transaction_type']}: {trade.get('politician', 'Unknown')} ({amount_str})",
+                        "politician": trade.get("politician", "Unknown"),
+                        "trade_type": trade["transaction_type"],
+                        "amount": trade.get("amount_min", 0),
+                        "trade_date": trade_date,
+                        "house": trade.get("house", "house"),
+                    })
+
+        except Exception as e:
+            logger.warning(f"Congressional trades scan failed: {e}")
 
         logger.info(f"Congressional trades: {len(results)} signals")
         return results

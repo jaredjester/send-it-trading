@@ -118,6 +118,7 @@ class OptionsTrader:
             "APCA-API-KEY-ID":     api_key,
             "APCA-API-SECRET-KEY": api_secret,
         }
+        self._risk_manager = None  # lazy-init on first use
 
     # ──────────────────────────────────────────────────────────────────────────
     # Public API
@@ -171,6 +172,27 @@ class OptionsTrader:
             return self._no_trade(
                 f"{contract_symbol} premium ${notional:.2f} exceeds budget ${max_per_contract:.0f}"
             )
+
+        # Portfolio risk check before placing order
+        try:
+            if self._risk_manager is None:
+                from core.portfolio_risk_manager import PortfolioRiskManager
+                self._risk_manager = PortfolioRiskManager()
+            try:
+                _pos_r = requests.get(f"{BASE_URL}/v2/positions", headers=self.headers, timeout=5)
+                _positions = _pos_r.json() if _pos_r.ok else []
+            except Exception:
+                _positions = []
+            risk_check = self._risk_manager.check_position_risk_limits(symbol, notional, _positions)
+            if risk_check.get('approved') == False:
+                logger.warning(
+                    f"Portfolio risk check rejected {symbol}: {risk_check.get('violations', [])}"
+                )
+                return self._no_trade(
+                    f"Risk check rejected for {symbol}: {risk_check.get('violations', ['unknown'])}"
+                )
+        except Exception as _rce:
+            logger.debug(f"Risk check failed for {symbol}: {_rce}")
 
         # Place order
         success, order_id = self._place_options_order(contract_symbol, qty=1)

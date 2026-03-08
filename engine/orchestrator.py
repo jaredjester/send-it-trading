@@ -100,12 +100,37 @@ class Orchestrator:
             logger.warning(f"Enhanced Watchlist unavailable: {e}")
             self.enhanced_watchlist = None
 
+        try:
+            from indicators.vwap_calculator import VWAPCalculator
+            self._vwap_calculator = VWAPCalculator()
+            logger.info("✓ VWAP Calculator loaded")
+        except Exception as e:
+            logger.warning(f"VWAPCalculator unavailable: {e}")
+            self._vwap_calculator = None
+
+        try:
+            from core.fair_value_calculator import FairValueCalculator
+            self._fair_value_calc = FairValueCalculator()
+            logger.info("✓ FairValueCalculator loaded")
+        except Exception as e:
+            logger.warning(f"FairValueCalculator unavailable: {e}")
+            self._fair_value_calc = None
+
+        try:
+            from core.enhanced_options_analyzer import EnhancedOptionsAnalyzer
+            self._enhanced_options = EnhancedOptionsAnalyzer()
+            logger.info("✓ EnhancedOptionsAnalyzer loaded")
+        except Exception as e:
+            logger.warning(f"EnhancedOptionsAnalyzer unavailable: {e}")
+            self._enhanced_options = None
+
         # IC state cache
         self._ic_cache = {}
         self._load_ic_state()
 
         self._episode_started_today: str = ""
         self._cycle_count = 0
+        self._congressional_signals: dict = {}  # populated by _run_congressional_intel()
 
         logger.info(
             f"Config: threshold={cfg('min_score_threshold')} "
@@ -405,9 +430,9 @@ class Orchestrator:
     def _vwap_boost(self, symbol: str) -> int:
         """Score boost based on VWAP signal strength."""
         try:
-            from indicators.vwap_calculator import VWAPCalculator
-            calculator = VWAPCalculator()
-            vwap_data = calculator.calculate_vwap(symbol)
+            if not self._vwap_calculator:
+                return 0
+            vwap_data = self._vwap_calculator.calculate_vwap(symbol)
 
             if vwap_data:
                 # Use the built-in signal strength
@@ -510,6 +535,16 @@ class Orchestrator:
                 elif screener_type in ("finviz_breakout", "finviz_momentum", "gap"):
                     raw_score = min(raw_score + 8, 100)
 
+                # Congressional trade signal boost
+                try:
+                    _cong_signals = getattr(self, "_congressional_signals", {})
+                    _cong_boost = self._congressional_score_boost(symbol, _cong_signals)
+                    if _cong_boost:
+                        raw_score = min(max(raw_score + _cong_boost, 0), 100)
+                        logger.info(f"  {symbol} congressional boost {_cong_boost:+d} → {raw_score:.0f}")
+                except Exception as _ce:
+                    logger.debug("Congressional boost failed for %s: %s", symbol, _ce)
+
                 # Scanner signal boost (from cron-written scanner_signals.json)
                 boost = self._scanner_boost(symbol)
                 if boost:
@@ -521,6 +556,31 @@ class Orchestrator:
                 if vwap_boost:
                     raw_score = min(raw_score + vwap_boost, 100)
                     logger.info(f"  {symbol} VWAP boost +{vwap_boost} → {raw_score:.0f}")
+
+                # Fair Value boost
+                try:
+                    if self._fair_value_calc:
+                        fv_result = self._fair_value_calc.calculate_fair_value(symbol)
+                        if fv_result.upside_potential > 0.10:
+                            fv_boost = min(fv_result.upside_potential * 40, 8)
+                            raw_score = min(raw_score + fv_boost, 100)
+                            logger.info(f"  {symbol} fair value boost +{fv_boost:.1f} (upside={fv_result.upside_potential:.1%}) → {raw_score:.0f}")
+                        elif fv_result.upside_potential < -0.10:
+                            fv_penalty = min(abs(fv_result.upside_potential) * 40, 5)
+                            raw_score = max(raw_score - fv_penalty, 0)
+                            logger.info(f"  {symbol} fair value penalty -{fv_penalty:.1f} (upside={fv_result.upside_potential:.1%}) → {raw_score:.0f}")
+                except Exception as _fve:
+                    logger.debug(f"Fair value boost failed for {symbol}: {_fve}")
+
+                # Enhanced Options boost (high-OI liquid contracts → better fills)
+                try:
+                    if self._enhanced_options:
+                        eo_contracts = self._enhanced_options.get_high_oi_contracts(symbol, option_type='call')
+                        if eo_contracts and eo_contracts[0].liquidity_score > 0.6:
+                            raw_score = min(raw_score + 5, 100)
+                            logger.info(f"  {symbol} enhanced options boost +5 (liquidity={eo_contracts[0].liquidity_score:.2f}) → {raw_score:.0f}")
+                except Exception as _eoe:
+                    logger.debug(f"Enhanced options boost failed for {symbol}: {_eoe}")
 
                 raw_score = max(0.0, raw_score)  # clamp: never return negative scores
                 logger.info(f"  {symbol} alpha score={raw_score:.1f} (type={screener_type})")
@@ -788,15 +848,73 @@ class Orchestrator:
         except Exception as e:
             logger.debug("Battle plan clear failed: %s", e)
 
+    def _run_congressional_intel(self):
+        """
+        Run congressional trade intelligence and store results in data/congressional_cache.json.
+        Purchase signals by notable politicians = positive alpha boost.
+        Sale signals = negative alpha score adjustment.
+        Returns a dict of {symbol: signal_dict} for use in scoring.
+        """
+        try:
+            sys.path.insert(0, str(BASE_DIR / "data_sources"))
+            from data_sources.congressional_trades import CongressionalTradesScanner
+            scanner = CongressionalTradesScanner(cache_dir=REPO_DIR / "data")
+            # Triggers a fresh fetch or returns cached data; cache written to data/congressional_cache.json
+            trades = scanner.get_trades(days_back=30)
+            if not trades:
+                return {}
+
+            # Build symbol→signal map for all symbols that appear in trades
+            symbols = list({t.get("symbol", "") for t in trades if t.get("symbol")})
+            signals = scanner.get_signals_for_symbols(symbols)
+            logger.info(
+                "Congressional intel: %d trades, %d symbols with signals",
+                len(trades),
+                len(signals),
+            )
+            return signals
+        except Exception as e:
+            logger.warning("Congressional intel failed: %s", e)
+            return {}
+
+    def _congressional_score_boost(self, symbol: str, congressional_signals: dict) -> int:
+        """
+        Return score boost/penalty from congressional trade signals.
+        Purchase by notable politician = up to +12 boost.
+        Sale by notable politician = up to -8 penalty.
+        """
+        if not congressional_signals:
+            return 0
+        sig = congressional_signals.get(symbol.upper())
+        if not sig:
+            return 0
+
+        signal = sig.get("signal", "neutral")
+        net = sig.get("net_sentiment", 0.0)
+        has_notable = bool(sig.get("notable_politicians"))
+
+        if signal == "bullish":
+            boost = int(min(abs(net) * 15, 12))
+            if has_notable:
+                boost += 3
+            return boost
+        elif signal == "bearish":
+            penalty = int(min(abs(net) * 12, 8))
+            if has_notable:
+                penalty += 2
+            return -penalty
+        return 0
+
     async def run_after_hours_cycle(self):
         """
         After-hours alpha research cycle — runs every 30 min while market is closed.
 
         Does NOT execute orders. Instead:
           1. Runs all scanners (Finviz works 24/7; gap/catalyst use after-hours data)
-          2. Scores each candidate via alpha engine (bar data available 24/7)
-          3. Writes top candidates to state/market_open_plan.json
-          4. Plan is loaded and prioritized at next market open
+          2. Pulls congressional trade intel and wires into scoring
+          3. Scores each candidate via alpha engine (bar data available 24/7)
+          4. Writes top candidates to state/market_open_plan.json
+          5. Plan is loaded and prioritized at next market open
 
         This means the bot hits the ground running at 9:30 AM every day.
         """
@@ -807,6 +925,10 @@ class Orchestrator:
             logger.info(f"Next market open: {next_open}")
 
         self._load_ic_state()
+
+        # ── Congressional trade intel (runs in background, writes cache) ─────
+        congressional_signals = self._run_congressional_intel()
+        self._congressional_signals = congressional_signals  # store for score_opportunity use
 
         # Scan for candidates (finviz insider/screener works after hours)
         opportunities = await self.scan_opportunities()

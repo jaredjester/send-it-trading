@@ -76,6 +76,22 @@ class AlphaEngine:
         self.cache_ttl = 300  # 5 min
         self.cache_timestamps: Dict[str, float] = {}
 
+        try:
+            from data_sources.social_sentiment_analyzer import SocialSentimentAnalyzer
+            self._social = SocialSentimentAnalyzer()
+            logger.info("SocialSentimentAnalyzer loaded")
+        except Exception as _e:
+            logger.warning("SocialSentimentAnalyzer unavailable: %s", _e)
+            self._social = None
+
+        try:
+            from core.dealer_flow import DealerFlowEngine
+            self._dealer_flow = DealerFlowEngine()
+            logger.info("DealerFlowEngine loaded")
+        except Exception as _e:
+            logger.warning("DealerFlowEngine unavailable: %s", _e)
+            self._dealer_flow = None
+
         logger.info("AlphaEngine initialized (config via dynamic_config.cfg())")
         logger.info(f"  Weights: MR={self.config['mean_reversion']['score_weight']:.2f} "
                      f"Mom={self.config['momentum']['score_weight']:.2f} "
@@ -536,6 +552,35 @@ class AlphaEngine:
             params = mean_rev
             position_type = "hold"
         
+        # Dealer flow boost
+        try:
+            if self._dealer_flow and bars:
+                spot_price = float(bars[-1]['c'])
+                flow = self._dealer_flow.compute(symbol, spot_price)
+                if flow.get('strategy_bias') == 'bullish':
+                    weighted_score += 6
+                elif flow.get('strategy_bias') == 'bearish':
+                    weighted_score -= 6
+                if flow.get('regime') == 'low_gamma':
+                    weighted_score += 2
+        except Exception as _dfe:
+            logger.debug("DealerFlow boost failed for %s: %s", symbol, _dfe)
+
+        # Social sentiment boost
+        try:
+            if self._social:
+                social = self._social.analyze_symbol(symbol)
+                _confidence = social.get('confidence', 'low')
+                _mention_count = social.get('mention_count', 0)
+                _sentiment_val = social.get('sentiment_score', 0.0)
+                if _confidence != 'low' and _mention_count > 5:
+                    weighted_score += _sentiment_val * 8
+        except Exception as _sse:
+            logger.debug("Social sentiment boost failed for %s: %s", symbol, _sse)
+
+        # Cap and floor
+        weighted_score = max(0.0, min(weighted_score, 100.0))
+
         # Calculate confidence (0-1)
         confidence = min(weighted_score / 100, 1.0)
         
