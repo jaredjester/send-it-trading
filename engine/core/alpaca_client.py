@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 import pandas as pd
 import requests
 
-from core.config import load_config
+# core.config is deprecated — AlpacaClient reads all credentials from env vars directly
 
 
 class AlpacaClient:
@@ -45,7 +45,7 @@ class AlpacaClient:
             retry_attempts: Number of retries for failed requests
             retry_delay: Delay between retries in seconds
         """
-        self.config = config or load_config()
+        self.config = config or {}
         acct = self.config.get("account", {})
         self.api_key = (
             acct.get("alpaca_api_key")
