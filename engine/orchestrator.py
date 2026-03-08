@@ -67,11 +67,9 @@ class Orchestrator:
             logger.error(f"Alpha Engine failed to load: {e}")
             self.alpha_engine = None
 
-        try:
-            self.monte_carlo = MonteCarloSimulator()
-        except Exception as e:
-            logger.warning(f"Monte Carlo unavailable: {e}")
-            self.monte_carlo = None
+        # MonteCarloSimulator requires historical returns — instantiated lazily per trade
+        self.monte_carlo = None
+        logger.info("✓ Monte Carlo ready (lazy-init per trade)")
 
         try:
             self.rl_bridge = EpisodeBridge()

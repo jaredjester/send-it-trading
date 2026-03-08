@@ -32,9 +32,26 @@ class GapScanner:
         self.universe = self._get_screener_universe()
     
     def _get_screener_universe(self) -> List[str]:
-        """Get universe of stocks to scan."""
-        # Start with most active stocks
-        # TODO: Pull from Alpaca screener or custom list
+        """Get universe of stocks to scan.
+        Attempts to fetch most-active symbols from Alpaca screener;
+        falls back to curated static list on any error.
+        """
+        try:
+            import os
+            key    = os.getenv("ALPACA_LIVE_KEY") or os.getenv("ALPACA_API_LIVE_KEY", "")
+            secret = os.getenv("ALPACA_SECRET") or os.getenv("ALPACA_API_SECRET", "")
+            if key and secret:
+                url = "https://data.alpaca.markets/v2/stocks/screener"
+                params = {"total_volume_gte": 1_000_000, "limit": 50}
+                headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
+                resp = requests.get(url, params=params, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json().get("snapshots", {})
+                    if data:
+                        return sorted(data.keys(), key=lambda s: data[s].get("dailyBar", {}).get("v", 0), reverse=True)[:60]
+        except Exception as e:
+            logger.debug("Alpaca screener fetch failed, using static list: %s", e)
+        # Static fallback
         return [
             # Mega caps
             'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA',

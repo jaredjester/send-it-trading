@@ -1267,12 +1267,13 @@ def reconcile_positions():
                         if _ro.get('symbol') == plan.occ_symbol:
                             cancel_order(_ro['id'])
                             logger.info('[RECONCILE] Cancelled pending order %s for %s', _ro['id'][:8], plan.occ_symbol)
-                except Exception: pass
+                except Exception as _cancel_err:
+                    logger.warning("[RECONCILE] Order cancel failed for %s: %s", plan.occ_symbol, _cancel_err)
                 close_plan(plan.plan_id, 0.0, 'reconcile_expired', plan.contracts)
                 try:
                     rl.close_trade(plan.trade_id, 0.0, -plan.entry_price * 100 * plan.contracts)
-                except Exception:
-                    pass
+                except Exception as _rl_err:
+                    logger.warning("[RECONCILE] RL close_trade failed: %s", _rl_err)
             else:
                 logger.info('[RECONCILE] %s confirmed live OK', plan.occ_symbol)
     except Exception as e:

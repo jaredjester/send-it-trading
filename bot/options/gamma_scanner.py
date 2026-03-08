@@ -57,6 +57,24 @@ def _headers() -> dict:
 from engine.core.pricing import bs_gamma, bs_delta
 
 
+
+def _implied_vol(spot: float, K: float, T: float, r: float, market_price: float,
+                 option_type: str = 'call', tol: float = 1e-4) -> float:
+    """Back-solve IV from market price using bisection."""
+    if market_price <= 0 or T <= 0:
+        return 0.0
+    lo, hi = 1e-4, 5.0
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        price = bs_price(spot, K, T, r, mid, option_type)
+        if abs(price - market_price) < tol:
+            return mid
+        if price < market_price:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
 def _bs_vanna(S: float, K: float, T: float, r: float, sigma: float) -> float:
     """
     Black-Scholes vanna = ∂Δ/∂σ = -N'(d1) * d2 / sigma
@@ -300,7 +318,13 @@ class GammaScanner:
 
             # Use close_price to back out IV if available, else use fallback
             close = float(c.get('close_price') or 0)
-            iv = iv_fallback  # TODO: back out from close with BS inversion
+            # Back-solve IV from close price if available, else use fallback
+            if close > 0:
+                opt_type = 'call' if float(c.get('strike_price', K)) <= spot else 'put'
+                solved_iv = _implied_vol(spot, K, T, self._rf, close, opt_type)
+                iv = solved_iv if solved_iv > 0.05 else iv_fallback
+            else:
+                iv = iv_fallback
 
             gamma = bs_gamma(spot, K, T, self._rf, iv)
             gex_contribution = oi * gamma * spot ** 2 * MULTIPLIER
