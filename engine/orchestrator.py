@@ -50,7 +50,7 @@ logger = logging.getLogger("orchestrator")
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
 
-class SimpleOrchestrator:
+class Orchestrator:
     """Trading orchestrator v2.2 — fully dynamic config + RL episode learning."""
 
     def __init__(self):
@@ -987,7 +987,7 @@ class SimpleOrchestrator:
 
 
 async def main():
-    orchestrator = SimpleOrchestrator()
+    orchestrator = Orchestrator()
     try:
         await orchestrator.run_cycle()
     except Exception as e:

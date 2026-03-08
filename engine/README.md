@@ -8,7 +8,7 @@ Strategy V2 options-first execution engine. Runs every 30 minutes via `main_wrap
 
 ```
 main_wrapper.py
-  └── orchestrator.py (SimpleOrchestrator)
+  └── orchestrator.py (Orchestrator)
         ├── Loads: scanner signals + bot intel from data/
         ├── Scores: each candidate via alpha_engine.py
         ├── Filters: IC-weak signals via rl/online_learner.py

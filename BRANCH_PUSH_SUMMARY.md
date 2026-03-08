@@ -52,8 +52,8 @@ The branch contains all stability and safety improvements for the trading bot:
 
 - `engine/core/trading_db.py` (NEW)
 - `bot/main.py` (error handling)
-- `bot/options_v1/rl.py` (database integration)
-- `bot/options_v1/data.py` (sessions, validation)
+- `bot/options/rl.py` (database integration)
+- `bot/options/data.py` (sessions, validation)
 - `engine/core/options_trader.py` (database operations)
 - `engine/check_portfolio.py` (timeouts)
 - `engine/orchestrator.py` (validation)

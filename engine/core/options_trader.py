@@ -202,7 +202,7 @@ class OptionsTrader:
                 "target_date":     expiry_str + "T16:00:00+00:00" if expiry_str else None,
                 "entry_ts":        _dt.now(_tz.utc).isoformat(),
                 "status":          "open",
-                "strategy":        "options_v2",
+                "strategy":        "options",
                 "signal_type":     signal_type,
                 "alpha_score":     score,
                 "ev_at_entry":     round(score, 1),

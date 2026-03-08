@@ -18,7 +18,7 @@ def load_keys():
     key = os.environ.get('ALPACA_API_LIVE_KEY', '')
     secret = os.environ.get('ALPACA_API_SECRET', '')
     if not key:
-        env = Path.home() / 'shared/stockbot/.env'
+        env = Path(__file__).resolve().parent.parent.parent / '.env'
         if env.exists():
             for line in env.read_text().splitlines():
                 if '=' in line and not line.startswith('#'):

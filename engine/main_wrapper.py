@@ -20,10 +20,10 @@ sys.path.insert(0, str(REPO_DIR))
 import requests as _requests
 import alpaca_env
 alpaca_env.bootstrap()
-from orchestrator import SimpleOrchestrator
+from orchestrator import Orchestrator
 
 _TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-_TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")  # stockbot group channel
+_TG_CHAT  = os.getenv("TELEGRAM_CHAT_ID")  # trading group channel
 _WORKER_ID = os.getenv("WORKER_ID", "live")
 _ALPACA_MODE = os.getenv("ALPACA_MODE", "live")
 
@@ -183,7 +183,7 @@ async def run_continuous():
     logger.info(f"Cycle interval: 30 min | Priority times: 09:30, 15:00 ET")
     logger.info("")
     
-    orchestrator = SimpleOrchestrator()
+    orchestrator = Orchestrator()
     
     cycle_count = 0
     

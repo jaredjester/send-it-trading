@@ -101,7 +101,7 @@ def compute_metrics(trades: list, window_days: int = 7) -> dict:
         sharpe = (avg / std * (252 ** 0.5)) if std > 0 else 0.0
 
     # Options-specific metrics
-    options_trades = [t for t in closed if t.get("strategy") in ("options_v2", "options_v1") or "occ_symbol" in t]
+    options_trades = [t for t in closed if t.get("strategy") in ("options", "options") or "occ_symbol" in t]
     options_pnl = sum(float(t.get("pnl") or 0) for t in options_trades)
 
     return {

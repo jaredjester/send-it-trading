@@ -5,7 +5,7 @@ This module contains the core trading bot logic, including:
 - `main.py`: Main entry point for the trading bot
 - `train_synthetic.py`: Synthetic data training for RL models
 - `config/`: Configuration files and base settings
-- `options_v1/`: Options trading strategies and components
+- `options/`: Options trading strategies and components
 
 ## Key Components
 

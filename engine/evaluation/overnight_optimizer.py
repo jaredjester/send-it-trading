@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
     handlers=[logging.StreamHandler()])
 logger = logging.getLogger('optimizer' + ('.dev' if DEV_MODE else ''))
 
-BASE_DIR = Path(__file__).parent.parent  # strategy_v2/
+BASE_DIR = Path(__file__).parent.parent  # engine/
 LIVE_CONFIG = BASE_DIR / 'evaluation' / 'live_config.json'
 OPT_LOG = BASE_DIR / 'evaluation' / ('optimizer_dev_log.jsonl' if DEV_MODE else 'optimizer_log.jsonl')
 

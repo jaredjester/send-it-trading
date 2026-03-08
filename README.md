@@ -35,7 +35,7 @@ send-it-trading/
 │
 ├── bot/                        BOT service
 │   ├── main.py                   Entry point
-│   └── options_v1/               Intelligence modules:
+│   └── options/               Intelligence modules:
 │       ├── news_scanner.py         FinBERT NLP on news headlines
 │       ├── insider_scanner.py      SEC insider filing tracker
 │       ├── polymarket_scanner.py   Prediction market signals
@@ -102,7 +102,7 @@ send-it-trading/
 │   ├── adaptive/                   DELETED — replaced by engine/rl/
 │   └── state/                      Runtime (gitignored):
 │       ├── trade_memory.jsonl        Every trade ever executed (engine's canonical record)
-│       ├── options_plans.jsonl       Open/closed options positions (engine's options_v2)
+│       ├── options_plans.jsonl       Open/closed options positions (engine's options)
 │       ├── market_open_plan.json     Tomorrow's battle plan (overwritten each cycle)
 │       └── latest_signals.json       Most recent scanner output
 │
@@ -218,7 +218,7 @@ Dashboard: `http://localhost:5555`
 | `engine/orchestrator.py` | `engine/state/trade_memory.jsonl`, `engine/state/options_plans.jsonl`, `engine/state/latest_signals.json` |
 | `engine/main_wrapper.py` | `engine/state/market_open_plan.json`, Telegram messages |
 | `engine/core/options_trader.py` | `engine/state/options_plans.jsonl` |
-| `bot/options_v1/trade_planner.py` | `data/bot_trade_plans.jsonl` |
+| `bot/options/trade_planner.py` | `data/bot_trade_plans.jsonl` |
 | `engine/evaluation/overnight_optimizer.py` | `engine/evaluation/live_config.json` |
 | `engine/rl/threshold_learner.py` | `engine/evaluation/threshold_bandit.json` |
 | `engine/rl/online_learner.py` | In-memory IC state (persisted via episode_bridge) |

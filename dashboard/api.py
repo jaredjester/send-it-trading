@@ -334,7 +334,7 @@ def _build_plan_display(p):
         'status':      p.get('status', 'open'),
         'actual_pnl':  p.get('actual_pnl'),
         'exit_reason': p.get('exit_reason', ''),
-        'strategy':    p.get('strategy', 'options_v2'),
+        'strategy':    p.get('strategy', 'options'),
         'signal_type': p.get('signal_type', ''),
         'alpha_score': p.get('alpha_score', p.get('ev_at_entry', 0)),
         'oc_checks':   p.get('oc_checks', 0),
@@ -362,7 +362,7 @@ def _build_trade_display(t):
         'pnl':       round(pnl_raw, 2) if pnl_raw is not None else None,
         'ev':        round(t.get('ev_at_entry', 0) or t.get('alpha_score', 0), 2),
         'outcome':   outcome,
-        'strategy':  t.get('strategy', 'options_v2'),
+        'strategy':  t.get('strategy', 'options'),
         'signal':    t.get('signal_type', ''),
         'thesis':    (t.get('entry_thesis') or t.get('thesis') or '')[:80],
         'ts':        entry_ts[:16] if entry_ts else '',
@@ -372,7 +372,7 @@ def _build_trade_display(t):
 # ─── Shared Data Loaders ────────────────────────────────────────────────────
 def _load_plans():
     """Load all trade plans with display dicts and summary stats. Deduplicates by plan_id."""
-    # Engine plans (strategy_v2 options-first)
+    # Engine options plans
     plans = db.get_positions()
     seen_ids = {p.get('id') for p in plans if p.get('id')}
     # Bot plans (options DCVX) — skip any already present in engine file
