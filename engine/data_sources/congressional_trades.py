@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
+logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
 # Notable politicians that boost signal strength
 NOTABLE_POLITICIANS = {
