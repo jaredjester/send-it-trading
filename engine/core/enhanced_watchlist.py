@@ -9,7 +9,11 @@ from dataclasses import dataclass
 import json
 
 from .dynamic_config import cfg
-from .contrarian_research import get_contrarian_research_boost, assess_consensus_risk_adjustment
+try:
+    from .contrarian_research import get_contrarian_research_boost, assess_consensus_risk_adjustment
+except ImportError:
+    def get_contrarian_research_boost(*a, **k): return 0
+    def assess_consensus_risk_adjustment(*a, **k): return 1.0
 from ..sector_map import get_sector, get_symbols_in_sector
 
 logger = logging.getLogger(__name__)

@@ -205,6 +205,22 @@ class AlpacaClient:
             "daytrade_count": int(account.get("daytrade_count", 0)),
         }
 
+
+    def get_spot(self, symbol: str) -> float:
+        """Latest trade price for a symbol via Alpaca data API."""
+        url = f"{self.data_url}/v2/stocks/{symbol}/trades/latest"
+        try:
+            data = self._request(url, params={"feed": "iex"})
+            if data and "trade" in data:
+                return float(data["trade"]["p"])
+        except Exception:
+            pass
+        # Fallback: latest bar close
+        bars = self.get_bars(symbol, timeframe="1Min", limit=1)
+        if bars is not None and not bars.empty:
+            return float(bars["close"].iloc[-1])
+        return 0.0
+
     def clear_cache(self):
         """Clear bar cache (e.g. before fresh run)."""
         self._bar_cache.clear()

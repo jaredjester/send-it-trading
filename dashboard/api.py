@@ -899,6 +899,41 @@ def api_rl_threshold():
     return jsonify(_load_rl_threshold())
 
 
+@app.route('/api/dealer_flow')
+def api_dealer_flow():
+    """Live GEX/VEX/Charm/IV-rank/VRP dealer flow signals from DealerFlowEngine."""
+    try:
+        import sys, os
+        engine_dir = Path(__file__).resolve().parent.parent / 'engine'
+        if str(engine_dir) not in sys.path:
+            sys.path.insert(0, str(engine_dir))
+        from core.dealer_flow import DealerFlowEngine
+        dfe = DealerFlowEngine()
+        symbols = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META']
+        from core.alpaca_client import AlpacaClient
+        client = AlpacaClient()
+        results = {}
+        for sym in symbols:
+            try:
+                spot = client.get_spot(sym)
+                if spot:
+                    results[sym] = dfe.compute(sym, spot)
+            except Exception as e:
+                results[sym] = {'error': str(e)}
+        # Market summary
+        spy = results.get('SPY', {})
+        summary = {
+            'spy_regime':      spy.get('regime', 'unknown'),
+            'spy_strategy':    spy.get('strategy_bias', 'neutral'),
+            'spy_gex':         spy.get('gex', 0),
+            'spy_gamma_flip':  spy.get('gamma_flip', 0),
+            'symbols_scanned': len([r for r in results.values() if 'error' not in r]),
+        }
+        return jsonify({'signals': results, 'summary': summary})
+    except Exception as e:
+        return jsonify({'error': str(e), 'signals': {}, 'summary': {}})
+
+
 @app.route('/api/gex')
 def api_gex():
     data = _read_json(GEX_CACHE)
