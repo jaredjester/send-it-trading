@@ -15,7 +15,7 @@ try:
 except Exception:
     _tg = None
 
-DATA_DIR  = Path('__ABSOLUTE_PATH_NEEDS_FIXING__')
+DATA_DIR  = Path(__file__).resolve().parent.parent.parent / 'data'
 CACHE_FILE = DATA_DIR / 'insider_intel.json'
 CACHE_TTL  = 3600 * 6   # 6 hours
 

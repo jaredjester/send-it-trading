@@ -22,7 +22,7 @@ import requests
 
 log = logging.getLogger(__name__)
 
-DATA_DIR   = Path('__ABSOLUTE_PATH_NEEDS_FIXING__')
+DATA_DIR   = Path(__file__).resolve().parent.parent.parent / 'data'
 CACHE_FILE = DATA_DIR / 'polymarket_intel.json'
 GAMMA_API  = 'https://gamma-api.polymarket.com'
 CACHE_TTL  = 600   # 10 min — refresh each overnight cycle

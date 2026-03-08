@@ -19,13 +19,13 @@ except Exception:
 
 log = logging.getLogger(__name__)
 
-DATA_DIR   = Path('__ABSOLUTE_PATH_NEEDS_FIXING__')
+DATA_DIR   = Path(__file__).resolve().parent.parent.parent / 'data'
 INTEL_FILE = DATA_DIR / 'news_intel.json'
 CACHE_TTL  = 600   # 10 min
 
 # ── Load env ────────────────────────────────────────────
 def _load_env():
-    env_file = Path('__ABSOLUTE_PATH_NEEDS_FIXING__')
+    env_file = Path(__file__).resolve().parent.parent.parent / '.env'
     if env_file.exists():
         for line in env_file.read_text().splitlines():
             line = line.strip()

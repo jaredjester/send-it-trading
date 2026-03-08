@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 # ── Config ──────────────────────────────────────────────
 def _load_env():
-    env_file = Path('__ABSOLUTE_PATH_NEEDS_FIXING__')
+    env_file = Path(__file__).resolve().parent.parent.parent / '.env'
     if env_file.exists():
         for line in env_file.read_text().splitlines():
             line = line.strip()
