@@ -11,6 +11,7 @@ from flask_cors import CORS
 import sys
 import time
 import json
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -66,6 +67,26 @@ BANDIT_FILE   = EVAL_DIR / 'threshold_bandit.json'
 LIVE_CFG_FILE = EVAL_DIR / 'live_config.json'
 
 # ─── Flask App ───────────────────────────────────────────────────────────────
+class _SafeEncoder(json.JSONEncoder):
+    """Encode NaN/Inf as null — browsers can't parse bare NaN in JSON."""
+    def default(self, obj):
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        return super().default(obj)
+
+    def iterencode(self, obj, _one_shot=False):
+        return super().iterencode(self._clean(obj), _one_shot)
+
+    def _clean(self, obj):
+        if isinstance(obj, float):
+            return None if (math.isnan(obj) or math.isinf(obj)) else obj
+        if isinstance(obj, dict):
+            return {k: self._clean(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._clean(v) for v in obj]
+        return obj
+
+
 app = Flask(__name__, template_folder=str(BASE_DIR / 'templates'))
 CORS(app)
 
